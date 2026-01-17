@@ -1,0 +1,22 @@
+{
+  "short_name": "SeniorFit",
+  "name": "SeniorFit - Avaliação Funcional e Treino",
+  "description": "Plataforma de gestão clínica e treinamento para idosos.",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3063/3063176.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3063/3063176.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#111827",
+  "background_color": "#f9fafb"
+}

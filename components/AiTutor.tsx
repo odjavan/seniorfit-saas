@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Patient } from '../types';
 import { X, Send, Bot, Sparkles } from 'lucide-react';
 import { authService } from '../services/authService';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 interface AiTutorProps {
   patient: Patient;
@@ -27,7 +27,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   const getApiKey = () => {
     try {
       const settings = authService.getIntegrationSettings();
-      return settings.gemini?.apiKey || '';
+      // Fallback to env var if not in settings, using Vite standard
+      return settings.gemini?.apiKey || import.meta.env.VITE_GEMINI_API_KEY || '';
     } catch (e) {
       return '';
     }
@@ -105,7 +106,9 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      // Initialize Standard SDK
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       
       const systemInstruction = `
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 
@@ -117,18 +120,16 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
 
       let promptToSend = text;
       if (!isSystemInit && messages.length > 0) {
-        // Keep context short to avoid token limits, reconstruct chat history format
+        // Simple context reconstruction
         const historyText = messages.slice(-6).map(m => `${m.role === 'user' ? 'Treinador' : 'Tutor'}: ${m.text}`).join('\n');
-        promptToSend = `${historyText}\nTreinador: ${text}`;
+        promptToSend = `${systemInstruction}\n\nHistórico:\n${historyText}\n\nTreinador: ${text}`;
+      } else {
+        promptToSend = `${systemInstruction}\n\n${text}`;
       }
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        config: { systemInstruction },
-        contents: promptToSend
-      });
-
-      const responseText = response.text;
+      const result = await model.generateContent(promptToSend);
+      const response = await result.response;
+      const responseText = response.text();
       
       if (responseText) {
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);

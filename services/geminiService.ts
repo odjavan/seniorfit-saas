@@ -1,28 +1,35 @@
-import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
+import { GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
 
-let chatSession: Chat | null = null;
+let chatSession: ChatSession | null = null;
 
-const getClient = (): GoogleGenAI => {
-  const apiKey = process.env.API_KEY;
+const getClient = (): GoogleGenerativeAI => {
+  // Vite env vars must be prefixed with VITE_ or accessed via import.meta.env
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
   if (!apiKey) {
-    console.error("API_KEY is not set");
-    throw new Error("API Key missing");
+    console.error("VITE_GEMINI_API_KEY is not set in environment variables");
+    // We don't throw here to allow the UI to handle the missing key gracefully if needed
   }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenerativeAI(apiKey);
 };
 
-export const initializeChat = (): void => {
+export const initializeChat = async (): Promise<void> => {
   try {
-    const ai = getClient();
-    chatSession = ai.chats.create({
-      model: 'gemini-3-flash-preview',
-      config: {
-        systemInstruction: `You are 'SeniorFit Coach', a warm, encouraging, and knowledgeable health companion for seniors. 
-        Your goal is to provide safe, low-impact exercise advice, nutrition tips, and motivation. 
-        - Always prioritize safety. Advise users to consult doctors before major lifestyle changes.
-        - Keep language simple, large, and clear. Avoid jargon.
-        - Be empathetic and positive.
-        - Keep responses concise (under 100 words) unless asked for details.`,
+    const genAI = getClient();
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    chatSession = model.startChat({
+      history: [
+        {
+          role: "user",
+          parts: [{ text: "System Instruction: You are 'SeniorFit Coach', a warm, encouraging, and knowledgeable health companion for seniors. Your goal is to provide safe, low-impact exercise advice, nutrition tips, and motivation. Always prioritize safety. Advise users to consult doctors before major lifestyle changes. Keep language simple, large, and clear. Avoid jargon. Be empathetic and positive. Keep responses concise (under 100 words) unless asked for details." }],
+        },
+        {
+          role: "model",
+          parts: [{ text: "Understood. I am SeniorFit Coach, ready to help with safe exercises and health tips for seniors." }],
+        }
+      ],
+      generationConfig: {
+        maxOutputTokens: 150,
       },
     });
   } catch (error) {
@@ -32,18 +39,19 @@ export const initializeChat = (): void => {
 
 export const sendMessageToCoach = async (message: string): Promise<string> => {
   if (!chatSession) {
-    initializeChat();
+    await initializeChat();
   }
 
   if (!chatSession) {
-     return "I'm having trouble connecting right now. Please check your API key.";
+     return "Estou com dificuldades para conectar agora. Por favor, verifique sua conexão ou a Chave API.";
   }
 
   try {
-    const response: GenerateContentResponse = await chatSession.sendMessage({ message });
-    return response.text || "I didn't catch that. Could you say it again?";
+    const result = await chatSession.sendMessage(message);
+    const response = await result.response;
+    return response.text();
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "I'm sorry, I encountered an issue. Please try again later.";
+    return "Desculpe, encontrei um problema técnico. Tente novamente mais tarde.";
   }
 };

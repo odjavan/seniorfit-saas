@@ -1,4 +1,5 @@
 import { Patient } from '../types';
+import { generateId } from '../utils/generateId';
 
 const STORAGE_KEY = 'sf_clients';
 
@@ -23,7 +24,7 @@ export const patientService = {
     
     const newPatient: Patient = {
       ...patientData,
-      id: crypto.randomUUID(),
+      id: generateId(), // Utilizando generateId() para segurança em HTTP
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

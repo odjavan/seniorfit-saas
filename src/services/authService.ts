@@ -1,4 +1,5 @@
 import { User, Session, Role, SystemSettings, IntegrationSettings } from '../types';
+import { generateId } from '../utils/generateId';
 
 const STORAGE_KEYS = {
   USER: 'seniorfit_user',
@@ -140,7 +141,7 @@ export const authService = {
 
     const newUser: User = {
       ...user,
-      id: crypto.randomUUID(),
+      id: generateId(), // Utilizando generateId() para segurança em HTTP
       createdAt: new Date().toISOString(),
     };
 
@@ -231,7 +232,7 @@ export const authService = {
     } else {
       // Create new user
       const newUser: User = {
-        id: crypto.randomUUID(),
+        id: generateId(), // Utilizando generateId() para segurança em HTTP
         name: payload.cus_name || email.split('@')[0],
         email: email,
         role: 'SUBSCRIBER',

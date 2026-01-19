@@ -12,6 +12,7 @@ import { patientService } from '../services/patientService';
 import { ReportTemplate } from '../components/ReportTemplate';
 import { AiTutor } from '../components/AiTutor';
 import { useToast } from '../contexts/ToastContext';
+import { generateId } from '../utils/generateId';
 
 interface PatientDetailsProps {
   patient: Patient;
@@ -306,7 +307,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
     if ('classification' in result) classification = result.classification;
 
     const historyEntry: AssessmentHistoryEntry = {
-      id: crypto.randomUUID(),
+      id: generateId(), // FIXED: replaced crypto.randomUUID()
       date: new Date().toISOString(),
       testId,
       testName,

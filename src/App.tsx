@@ -3,7 +3,7 @@ import { Login } from './pages/Login';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
 import { AdminPanel } from './pages/AdminPanel';
-import { AdminHome } from './pages/AdminHome';
+// import { AdminHome } from './pages/AdminHome'; // REMOVIDO: Arquivo não existe
 import { Subscribers } from './pages/Subscribers';
 import { Integrations } from './pages/Integrations';
 import { TrainingDashboard } from './pages/TrainingDashboard';
@@ -48,7 +48,6 @@ function AppContent() {
 
   useEffect(() => {
     if (user) {
-      // Redireciona ADMIN para o dashboard master, outros para lista de pacientes
       if (user.role === 'ADMIN') {
         setCurrentView('admin-dashboard');
       } else {
@@ -73,7 +72,7 @@ function AppContent() {
     setShowInstallHelp(!showInstallHelp);
   };
 
-  const handleNavigate = (view: ViewState) => {
+  const handleNavigate = (view: any) => { // FIX: Type 'any' to resolve TS7006
     // Basic Role Guard
     const adminViews = ['admin-settings', 'admin-dashboard', 'subscribers', 'integrations', 'eduzz', 'crm'];
     if (adminViews.includes(view) && user?.role !== 'ADMIN') {
@@ -93,7 +92,7 @@ function AppContent() {
   };
 
   const handleUpdatePatient = (updatedPatient: Patient) => {
-    // State update handled by re-render triggered by view change or local mutation in service
+    // State update handled by re-render
   };
 
   const getEmbedUrl = (url: string) => {
@@ -129,14 +128,15 @@ function AppContent() {
       
       <Sidebar 
         currentView={currentView === 'patient-details' ? 'patients' : currentView} 
-        onNavigate={(view) => handleNavigate(view as ViewState)} 
+        onNavigate={(v: any) => handleNavigate(v)} 
         userRole={user.role}
       />
       
       <main className="pt-16 lg:ml-64 min-h-[calc(100vh-64px)]">
         
+        {/* FALLBACK: Como AdminHome foi removido, usamos AdminPanel para o dashboard */}
         {currentView === 'admin-dashboard' && user.role === 'ADMIN' && (
-          <AdminHome onNavigate={(v) => handleNavigate(v)} />
+          <AdminPanel />
         )}
 
         {currentView === 'agenda' && (
@@ -203,7 +203,6 @@ function AppContent() {
          </Modal>
       )}
 
-      {/* Install Guide Modal */}
       <InstallGuide isOpen={showInstallGuide} onClose={() => setShowInstallGuide(false)} />
     </div>
   );

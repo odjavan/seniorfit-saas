@@ -48,7 +48,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     if (!recoveryEmail) return;
     
-    // 1. Verificação de existência do usuário (Economiza chamadas de API e melhora UX)
+    // Verificação local de usuário
     const users = authService.getAllUsers();
     const userExists = users.find(u => u.email.toLowerCase() === recoveryEmail.toLowerCase());
 
@@ -126,7 +126,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               </div>
             </div>
 
-            {/* Human Verification Toggle */}
             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700 flex items-center">
                 <ShieldCheck size={16} className="mr-2 text-gray-500" />
@@ -184,7 +183,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         </div>
       </div>
 
-      {/* Forgot Password Modal */}
       <Modal
         isOpen={isRecoveryOpen}
         onClose={() => setIsRecoveryOpen(false)}

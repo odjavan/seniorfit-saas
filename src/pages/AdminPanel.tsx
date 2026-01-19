@@ -6,6 +6,7 @@ import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
 import { Trash2, Edit, Plus, Save, Youtube } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
+import { generateId } from '../utils/generateId';
 
 export const AdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'users' | 'settings'>('users');
@@ -68,6 +69,7 @@ export const AdminPanel: React.FC = () => {
         authService.updateUser({ ...editingUser, ...userForm });
         addToast('Usuário atualizado com sucesso!', 'success');
       } else {
+        // authService.createUser utiliza generateId() internamente, garantindo compatibilidade HTTP
         authService.createUser(userForm);
         addToast('Usuário criado com sucesso!', 'success');
       }

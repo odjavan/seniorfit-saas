@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Login } from './pages/Login';
-import { Home } from './pages/Home';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
-import { History } from './pages/History';
 import { AdminPanel } from './pages/AdminPanel';
 import { AdminHome } from './pages/AdminHome';
 import { Subscribers } from './pages/Subscribers';
@@ -19,12 +17,12 @@ import { Modal } from './components/Modal';
 import { InstallGuide } from './components/InstallGuide';
 import { ToastProvider } from './contexts/ToastContext';
 
-type ViewState = 'dashboard' | 'patients' | 'patient-details' | 'history' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'training' | 'agenda';
+type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'training' | 'agenda';
 
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [currentView, setCurrentView] = useState<ViewState>('dashboard');
+  const [currentView, setCurrentView] = useState<ViewState>('patients');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   
   // Install/Help Modal
@@ -49,24 +47,24 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (user && user.role === 'ADMIN' && currentView === 'dashboard') {
-      setCurrentView('admin-dashboard');
+    if (user) {
+      // Redireciona ADMIN para o dashboard master, outros para lista de pacientes
+      if (user.role === 'ADMIN') {
+        setCurrentView('admin-dashboard');
+      } else {
+        setCurrentView('patients');
+      }
     }
   }, [user]);
 
   const handleLoginSuccess = (loggedInUser: User) => {
     setUser(loggedInUser);
-    if (loggedInUser.role === 'ADMIN') {
-      setCurrentView('admin-dashboard');
-    } else {
-      setCurrentView('dashboard');
-    }
   };
 
   const handleLogout = () => {
     authService.logout();
     setUser(null);
-    setCurrentView('dashboard');
+    setCurrentView('patients');
   };
   
   const toggleHelp = () => {
@@ -95,7 +93,7 @@ function AppContent() {
   };
 
   const handleUpdatePatient = (updatedPatient: Patient) => {
-    // State update handled by re-render triggered by view change or local mutation
+    // State update handled by re-render triggered by view change or local mutation in service
   };
 
   const getEmbedUrl = (url: string) => {
@@ -136,10 +134,7 @@ function AppContent() {
       />
       
       <main className="pt-16 lg:ml-64 min-h-[calc(100vh-64px)]">
-        {currentView === 'dashboard' && (
-          <Home user={user} onNavigate={(v) => handleNavigate(v as ViewState)} />
-        )}
-
+        
         {currentView === 'admin-dashboard' && user.role === 'ADMIN' && (
           <AdminHome onNavigate={(v) => handleNavigate(v)} />
         )}
@@ -162,10 +157,6 @@ function AppContent() {
 
         {currentView === 'training' && (
           <TrainingDashboard />
-        )}
-
-        {currentView === 'history' && (
-           <History />
         )}
 
         {currentView === 'admin-settings' && user.role === 'ADMIN' && (

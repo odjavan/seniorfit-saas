@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Patient } from '../types';
 import { X, Send, Bot, Sparkles } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { authService } from '../services/authService';
 
 interface AiTutorProps {
   patient: Patient;
@@ -22,6 +23,17 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
 
+  // Acesso seguro à chave API (Prioridade: Settings do Admin > Env Var)
+  const getApiKey = () => {
+    try {
+      const settings = authService.getIntegrationSettings();
+      if (settings.gemini?.apiKey) return settings.gemini.apiKey;
+      return import.meta.env.VITE_GEMINI_API_KEY || '';
+    } catch (e) {
+      return '';
+    }
+  };
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -36,13 +48,17 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   }, [isOpen]);
 
   const initChat = async () => {
-    if (!process.env.API_KEY) {
-      setMessages([{ role: 'model', text: 'Chave API não encontrada (process.env.API_KEY).' }]);
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      setMessages([{ role: 'model', text: 'Chave API não encontrada. Configure no Painel Admin ou no arquivo .env.' }]);
       return;
     }
 
     setIsLoading(true);
     try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
       const context = `
         PACIENTE ATUAL:
         Nome: ${patient.name}
@@ -65,33 +81,34 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         ${context}
       `;
       
-      await sendMessageToGemini(initialPrompt, true);
+      const result = await model.generateContent(initialPrompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      setMessages(prev => [...prev, { role: 'model', text }]);
     } catch (err: any) {
       console.error("Erro Detalhado Gemini (Init):", err);
       setMessages(prev => [...prev, { role: 'model', text: "Erro ao iniciar o Tutor. Verifique a conexão ou a API Key." }]);
+    } finally {
       setIsLoading(false);
     }
   };
 
-  const sendMessageToGemini = async (text: string, isSystemInit = false) => {
-    // Immediate Validation
-    if (!process.env.API_KEY) {
-      if (!isSystemInit) {
-         setMessages(prev => [...prev, { role: 'model', text: "Chave API não encontrada (process.env.API_KEY)." }]);
-      }
-      setIsLoading(false);
+  const sendMessageToGemini = async (text: string) => {
+    const apiKey = getApiKey();
+    
+    if (!apiKey) {
+      setMessages(prev => [...prev, { role: 'model', text: "Chave API não encontrada." }]);
       return;
     }
 
-    if (!isSystemInit) {
-      setMessages(prev => [...prev, { role: 'user', text }]);
-    }
-    
+    setMessages(prev => [...prev, { role: 'user', text }]);
     setIsLoading(true);
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       
       const systemInstruction = `
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 
@@ -101,40 +118,19 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         Responda sempre em Português do Brasil.
       `;
 
-      let promptToSend = text;
-      if (!isSystemInit && messages.length > 0) {
-        // Simple context reconstruction
-        const historyText = messages.slice(-6).map(m => `${m.role === 'user' ? 'Treinador' : 'Tutor'}: ${m.text}`).join('\n');
-        promptToSend = `Histórico:\n${historyText}\n\nTreinador: ${text}`;
-      }
-      
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: promptToSend,
-        config: {
-            systemInstruction: systemInstruction,
-        }
-      });
-      
-      const responseText = response.text;
+      // Simulação de histórico enviando contexto + histórico recente no prompt (versão stateless simplificada para estabilidade)
+      const promptToSend = `${systemInstruction}\n\nTreinador pergunta: ${text}`;
+
+      const result = await model.generateContent(promptToSend);
+      const response = await result.response;
+      const responseText = response.text();
       
       if (responseText) {
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);
       }
     } catch (err: any) {
       console.error("Erro Detalhado Gemini:", err);
-      
-      let uiErrorMessage = "Erro ao processar solicitação.";
-      const errString = err.toString();
-
-      if (errString.includes('401')) uiErrorMessage = "Erro 401: Chave de API inválida.";
-      else if (errString.includes('403')) uiErrorMessage = "Erro 403: Permissão negada ou cota excedida.";
-      else if (errString.includes('404')) uiErrorMessage = "Erro 404: Modelo não encontrado ou endpoint incorreto.";
-      else if (errString.includes('Failed to fetch')) uiErrorMessage = "Erro de Conexão: Falha ao contatar servidor do Google.";
-
-      if (!isSystemInit) {
-        setMessages(prev => [...prev, { role: 'model', text: `${uiErrorMessage} (Verifique o console para detalhes)` }]);
-      }
+      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação." }]);
     } finally {
       setIsLoading(false);
     }

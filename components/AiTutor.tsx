@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Patient } from '../types';
 import { X, Send, Bot, Sparkles } from 'lucide-react';
-import { authService } from '../services/authService';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
 interface AiTutorProps {
   patient: Patient;
@@ -23,17 +22,6 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Safe access to API Key from System Settings
-  const getApiKey = () => {
-    try {
-      const settings = authService.getIntegrationSettings();
-      // Fallback to env var if not in settings, using Vite standard
-      return settings.gemini?.apiKey || import.meta.env.VITE_GEMINI_API_KEY || '';
-    } catch (e) {
-      return '';
-    }
-  };
-
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -48,9 +36,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   }, [isOpen]);
 
   const initChat = async () => {
-    const apiKey = getApiKey();
-    if (!apiKey) {
-      setMessages([{ role: 'model', text: 'Chave API não encontrada. Verifique as configurações no Painel Admin (Sistema > Integrações) para ativar o Tutor.' }]);
+    if (!process.env.API_KEY) {
+      setMessages([{ role: 'model', text: 'Chave API não encontrada (process.env.API_KEY).' }]);
       return;
     }
 
@@ -87,12 +74,10 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   };
 
   const sendMessageToGemini = async (text: string, isSystemInit = false) => {
-    const apiKey = getApiKey();
-    
     // Immediate Validation
-    if (!apiKey) {
+    if (!process.env.API_KEY) {
       if (!isSystemInit) {
-         setMessages(prev => [...prev, { role: 'model', text: "Chave API não encontrada. Verifique as configurações no Painel Admin." }]);
+         setMessages(prev => [...prev, { role: 'model', text: "Chave API não encontrada (process.env.API_KEY)." }]);
       }
       setIsLoading(false);
       return;
@@ -106,9 +91,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
     setError(null);
 
     try {
-      // Initialize Standard SDK
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const systemInstruction = `
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 
@@ -122,14 +105,18 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       if (!isSystemInit && messages.length > 0) {
         // Simple context reconstruction
         const historyText = messages.slice(-6).map(m => `${m.role === 'user' ? 'Treinador' : 'Tutor'}: ${m.text}`).join('\n');
-        promptToSend = `${systemInstruction}\n\nHistórico:\n${historyText}\n\nTreinador: ${text}`;
-      } else {
-        promptToSend = `${systemInstruction}\n\n${text}`;
+        promptToSend = `Histórico:\n${historyText}\n\nTreinador: ${text}`;
       }
-
-      const result = await model.generateContent(promptToSend);
-      const response = await result.response;
-      const responseText = response.text();
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: promptToSend,
+        config: {
+            systemInstruction: systemInstruction,
+        }
+      });
+      
+      const responseText = response.text;
       
       if (responseText) {
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);

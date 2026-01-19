@@ -1,1 +1,1 @@
-/// <reference types="vite/client" />
+// Reference to vite/client removed to avoid type errors

@@ -293,7 +293,7 @@ export const Integrations: React.FC = () => {
               <div className="space-y-4">
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
                   <p>A chave de API do Gemini é configurada via variáveis de ambiente (<code>process.env.API_KEY</code>) para maior segurança.</p>
-                  <p className="mt-2">Não é necessário configurar nada aqui.</p>
+                  <p className="mt-2">O sistema gerencia a conexão automaticamente.</p>
                 </div>
               </div>
             </div>

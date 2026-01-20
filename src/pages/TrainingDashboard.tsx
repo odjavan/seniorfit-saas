@@ -23,9 +23,16 @@ export const TrainingDashboard: React.FC = () => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    setPlans(trainingService.getAllPlans());
-    setPatients(patientService.getAll());
+  const loadData = async () => {
+    try {
+      // Planos de treino ainda são locais (sync), mas pacientes são do Supabase (async)
+      setPlans(trainingService.getAllPlans());
+      
+      const fetchedPatients = await patientService.getAll();
+      setPatients(fetchedPatients);
+    } catch (error) {
+      console.error("Erro ao carregar dados de treinamento:", error);
+    }
   };
 
   const handleCreatePlan = (e: React.FormEvent) => {

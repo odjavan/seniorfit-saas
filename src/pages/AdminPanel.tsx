@@ -6,7 +6,6 @@ import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
 import { Trash2, Edit, Plus, Save, Youtube } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
-import { generateId } from '../utils/generateId';
 
 export const AdminPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'users' | 'settings'>('users');
@@ -23,9 +22,20 @@ export const AdminPanel: React.FC = () => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    setUsers(authService.getAllUsers());
-    setSettings(authService.getSettings());
+  const loadData = async () => {
+    try {
+      // Carregamento paralelo para performance, mas aguardando ambos
+      const [fetchedUsers, fetchedSettings] = await Promise.all([
+        authService.getAllUsers(),
+        authService.getSettings()
+      ]);
+
+      setUsers(fetchedUsers);
+      setSettings(fetchedSettings);
+    } catch (error) {
+      console.error("Erro ao carregar dados do Admin:", error);
+      addToast("Erro ao carregar dados do painel.", "error");
+    }
   };
 
   // --- Settings Logic ---
@@ -36,6 +46,7 @@ export const AdminPanel: React.FC = () => {
   };
 
   const convertToEmbedUrl = (url: string) => {
+    if (!url) return '';
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
 
@@ -62,29 +73,28 @@ export const AdminPanel: React.FC = () => {
     setIsUserModalOpen(true);
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       if (editingUser) {
-        authService.updateUser({ ...editingUser, ...userForm });
+        await authService.updateUser({ ...editingUser, ...userForm });
         addToast('Usuário atualizado com sucesso!', 'success');
       } else {
-        // authService.createUser utiliza generateId() internamente, garantindo compatibilidade HTTP
-        authService.createUser(userForm);
+        await authService.createUser(userForm);
         addToast('Usuário criado com sucesso!', 'success');
       }
       setIsUserModalOpen(false);
-      loadData();
+      await loadData(); // Recarrega a lista atualizada
     } catch (error: any) {
       addToast(error.message, 'error');
     }
   };
 
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
     if (window.confirm('Tem certeza que deseja remover este usuário?')) {
       try {
-        authService.deleteUser(id);
-        loadData();
+        await authService.deleteUser(id);
+        await loadData();
         addToast('Usuário removido.', 'success');
       } catch (error: any) {
         addToast(error.message, 'error');

@@ -39,13 +39,25 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
   }, [activeView]);
 
   useEffect(() => {
-    setSettings(authService.getIntegrationSettings());
-    calculateStats();
+    const initData = async () => {
+      try {
+        const data = await authService.getIntegrationSettings();
+        setSettings(data);
+        await calculateStats();
+      } catch (error) {
+        console.error("Erro ao inicializar integrações:", error);
+      }
+    };
+    initData();
   }, []);
 
-  const calculateStats = () => {
+  const calculateStats = async () => {
     try {
-      const users = authService.getAllUsers();
+      // Agora aguarda a Promise retornar o array
+      const users = await authService.getAllUsers();
+      
+      if (!Array.isArray(users)) return;
+
       const subscribers = users.filter(u => u.role === 'SUBSCRIBER');
       const active = subscribers.filter(u => u.subscriptionStatus === 'active');
       const pending = subscribers.filter(u => u.subscriptionStatus === 'pending');
@@ -79,9 +91,9 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setIsSaving(true);
-    authService.updateIntegrationSettings(settings);
+    await authService.updateIntegrationSettings(settings);
     addToast('Configurações salvas! Atualizando sistema...', 'success');
     
     // Forçar recarregamento para garantir que o GeminiService pegue a nova chave
@@ -115,6 +127,7 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
       } else {
         addToast(`Assinante atualizado.`, 'success');
       }
+      // Recalcula stats após simulação (reutiliza a função async)
       calculateStats();
     } catch (error: any) {
       addToast(`Erro Webhook: ${error.message}`, 'error');

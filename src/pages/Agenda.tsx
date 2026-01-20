@@ -5,10 +5,11 @@ import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { agendaService } from '../services/agendaService';
 import { patientService } from '../services/patientService';
-import { Appointment, Patient, TestStatus } from '../types';
+import { Appointment, Patient } from '../types';
 import { useToast } from '../contexts/ToastContext';
 
 export const Agenda: React.FC = () => {
+  // Inicialização segura
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const { addToast } = useToast();
@@ -28,8 +29,17 @@ export const Agenda: React.FC = () => {
   }, []);
 
   const loadData = () => {
-    setAppointments(agendaService.getAll());
-    setPatients(patientService.getAll());
+    try {
+      const appts = agendaService.getAll();
+      // Garantia de Array
+      setAppointments(Array.isArray(appts) ? appts : []);
+      
+      const pts = patientService.getAll();
+      setPatients(Array.isArray(pts) ? pts : []);
+    } catch (e) {
+      console.error("Erro fatal ao carregar agenda", e);
+      setAppointments([]);
+    }
   };
 
   const handleCreate = (e: React.FormEvent) => {
@@ -72,7 +82,6 @@ export const Agenda: React.FC = () => {
     }
   };
 
-  // Helper to find pending tests for a patient
   const getPendingTests = (patientId: string) => {
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return [];
@@ -81,35 +90,45 @@ export const Agenda: React.FC = () => {
     const completedTestIds = patient.tests?.filter(t => t.status === 'completed').map(t => t.testId) || [];
     
     const testNames: {[key: string]: string} = {
-      'fried': 'Fried',
-      'tug': 'TUG',
-      'sit_stand_30': 'Levantar',
-      'arm_curl': 'Flexão',
-      'sit_reach': 'Alcance',
-      'gds15': 'GDS-15',
-      'meem_cognitive': 'MEEM',
-      'berg_balance': 'Berg'
+      'fried': 'Fried', 'tug': 'TUG', 'sit_stand_30': 'Levantar', 'arm_curl': 'Flexão',
+      'sit_reach': 'Alcance', 'gds15': 'GDS-15', 'meem_cognitive': 'MEEM', 'berg_balance': 'Berg'
     };
 
     const pending = allTestIds.filter(id => !completedTestIds.includes(id));
     return pending.map(id => testNames[id]);
   };
 
-  // Group appointments by date
-  const groupedAppointments = appointments.reduce((groups, appt) => {
-    const date = new Date(appt.dateTime).toLocaleDateString();
-    if (!groups[date]) groups[date] = [];
-    groups[date].push(appt);
+  // Lógica de Agrupamento Blindada (ISO Dates)
+  // Usa o formato YYYY-MM-DD como chave para garantir ordenação correta sem depender do locale do browser
+  const groupedAppointments = (appointments || []).reduce((groups, appt) => {
+    if (!appt || !appt.dateTime) return groups;
+    try {
+      // Extrai apenas a parte da data YYYY-MM-DD da string ISO
+      const dateKey = appt.dateTime.split('T')[0]; 
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(appt);
+    } catch (e) {
+      // Ignora datas inválidas silenciosamente para não travar a UI
+    }
     return groups;
   }, {} as Record<string, Appointment[]>);
 
-  const sortedDates = Object.keys(groupedAppointments).sort((a, b) => {
-    const partsA = a.split('/');
-    const partsB = b.split('/');
-    const dateA = new Date(Number(partsA[2]), Number(partsA[1]) - 1, Number(partsA[0]));
-    const dateB = new Date(Number(partsB[2]), Number(partsB[1]) - 1, Number(partsB[0]));
-    return dateA.getTime() - dateB.getTime();
-  });
+  // Ordenação de chaves (Datas ISO são ordenáveis alfabeticamente de forma correta)
+  const sortedDates = Object.keys(groupedAppointments).sort();
+
+  const formatDateHeader = (isoDateString: string) => {
+    try {
+      // Cria a data no fuso local mas baseada nos componentes da string para evitar shift de timezone
+      const [year, month, day] = isoDateString.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
+      return {
+        full: date.toLocaleDateString('pt-BR'),
+        weekday: date.toLocaleDateString('pt-BR', { weekday: 'long' })
+      };
+    } catch (e) {
+      return { full: isoDateString, weekday: '' };
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -126,7 +145,7 @@ export const Agenda: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-            <CalendarIcon className="mr-3 text-gray-700" /> Agenda Master
+            <CalendarIcon className="mr-3 text-gray-700" /> Agenda
           </h1>
           <p className="text-gray-600 mt-1">Organize seus atendimentos e veja pendências de avaliação.</p>
         </div>
@@ -135,7 +154,7 @@ export const Agenda: React.FC = () => {
         </Button>
       </div>
 
-      {appointments.length === 0 ? (
+      {(!appointments || appointments.length === 0) ? (
         <div className="text-center py-20 bg-white rounded-xl border border-gray-200 border-dashed">
           <div className="mx-auto h-16 w-16 text-gray-300 mb-4 bg-gray-50 rounded-full flex items-center justify-center">
             <CalendarIcon size={32} />
@@ -148,91 +167,94 @@ export const Agenda: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-8">
-          {sortedDates.map(date => (
-            <div key={date}>
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center sticky top-16 bg-gray-50 py-2 z-10 shadow-sm sm:shadow-none rounded-lg sm:rounded-none px-3 sm:px-0">
-                <div className="w-2 h-2 bg-blue-600 rounded-full mr-2"></div>
-                {date} 
-                <span className="text-sm font-normal text-gray-500 ml-2">
-                  ({new Date(groupedAppointments[date][0].dateTime).toLocaleDateString(undefined, {weekday: 'long'})})
-                </span>
-              </h3>
-              <div className="space-y-4">
-                {groupedAppointments[date].map(appt => {
-                  const pendingTests = getPendingTests(appt.patientId);
-                  const isEval = appt.type.includes('Avaliação');
-                  
-                  return (
-                    <div key={appt.id} className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all relative group">
-                      <div className="flex flex-col sm:flex-row justify-between gap-4">
-                        
-                        {/* Left: Time & Type */}
-                        <div className="flex gap-4">
-                          <div className="flex flex-col items-center justify-center min-w-[60px] border-r border-gray-100 pr-4">
-                            <span className="text-lg font-bold text-gray-900">
-                              {new Date(appt.dateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                            </span>
-                            <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Horário</span>
-                          </div>
-                          <div>
-                             <div className="flex items-center gap-2 mb-1">
-                               <h4 className="text-lg font-bold text-gray-900">{appt.patientName}</h4>
-                               <a 
-                                 href={`https://wa.me/55${appt.patientPhone.replace(/\D/g, '')}`} 
-                                 target="_blank" 
-                                 rel="noreferrer"
-                                 className="text-green-500 hover:text-green-600 bg-green-50 p-1 rounded-full transition-colors"
-                                 title="Chamar no WhatsApp"
-                               >
-                                 <MessageCircle size={16} />
-                               </a>
-                             </div>
-                             <p className="text-sm text-gray-600 font-medium">{appt.type}</p>
-                             
-                             {/* Pending Tests Info */}
-                             {isEval && pendingTests.length > 0 && appt.status !== 'Concluído' && (
-                               <div className="mt-2 flex items-start gap-1.5 text-xs text-orange-700 bg-orange-50 p-2 rounded-md border border-orange-100 max-w-sm">
-                                 <ClipboardList size={14} className="mt-0.5 shrink-0" />
-                                 <span>
-                                   <strong>Pendente:</strong> {pendingTests.slice(0, 5).join(', ')}
-                                   {pendingTests.length > 5 && '...'}
-                                 </span>
+          {sortedDates.map(dateKey => {
+            const displayDate = formatDateHeader(dateKey);
+            return (
+              <div key={dateKey}>
+                <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center sticky top-16 bg-gray-50 py-2 z-10 shadow-sm sm:shadow-none rounded-lg sm:rounded-none px-3 sm:px-0">
+                  <div className="w-2 h-2 bg-blue-600 rounded-full mr-2"></div>
+                  {displayDate.full} 
+                  <span className="text-sm font-normal text-gray-500 ml-2 capitalize">
+                    ({displayDate.weekday})
+                  </span>
+                </h3>
+                <div className="space-y-4">
+                  {groupedAppointments[dateKey]?.map(appt => {
+                    const pendingTests = getPendingTests(appt.patientId);
+                    const isEval = appt.type.includes('Avaliação');
+                    
+                    return (
+                      <div key={appt.id} className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all relative group">
+                        <div className="flex flex-col sm:flex-row justify-between gap-4">
+                          
+                          {/* Left: Time & Type */}
+                          <div className="flex gap-4">
+                            <div className="flex flex-col items-center justify-center min-w-[60px] border-r border-gray-100 pr-4">
+                              <span className="text-lg font-bold text-gray-900">
+                                {new Date(appt.dateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </span>
+                              <span className="text-xs text-gray-500 uppercase font-bold tracking-wider">Horário</span>
+                            </div>
+                            <div>
+                               <div className="flex items-center gap-2 mb-1">
+                                 <h4 className="text-lg font-bold text-gray-900">{appt.patientName}</h4>
+                                 <a 
+                                   href={`https://wa.me/55${appt.patientPhone.replace(/\D/g, '')}`} 
+                                   target="_blank" 
+                                   rel="noreferrer"
+                                   className="text-green-500 hover:text-green-600 bg-green-50 p-1 rounded-full transition-colors"
+                                   title="Chamar no WhatsApp"
+                                 >
+                                   <MessageCircle size={16} />
+                                 </a>
                                </div>
-                             )}
+                               <p className="text-sm text-gray-600 font-medium">{appt.type}</p>
+                               
+                               {/* Pending Tests Info */}
+                               {isEval && pendingTests.length > 0 && appt.status !== 'Concluído' && (
+                                 <div className="mt-2 flex items-start gap-1.5 text-xs text-orange-700 bg-orange-50 p-2 rounded-md border border-orange-100 max-w-sm">
+                                   <ClipboardList size={14} className="mt-0.5 shrink-0" />
+                                   <span>
+                                     <strong>Pendente:</strong> {pendingTests.slice(0, 5).join(', ')}
+                                     {pendingTests.length > 5 && '...'}
+                                   </span>
+                                 </div>
+                               )}
 
-                             {appt.notes && <p className="text-xs text-gray-400 mt-2 italic">"{appt.notes}"</p>}
+                               {appt.notes && <p className="text-xs text-gray-400 mt-2 italic">"{appt.notes}"</p>}
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Right: Status & Actions */}
-                        <div className="flex flex-col items-end gap-3">
-                           <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${getStatusColor(appt.status)}`}>
-                             {appt.status}
-                           </span>
-                           
-                           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                             {appt.status !== 'Concluído' && (
-                               <button onClick={() => handleStatusChange(appt.id, 'Concluído')} className="text-green-600 hover:bg-green-50 p-1.5 rounded" title="Marcar como Concluído">
-                                 <CheckCircle size={20} />
+                          {/* Right: Status & Actions */}
+                          <div className="flex flex-col items-end gap-3">
+                             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${getStatusColor(appt.status)}`}>
+                               {appt.status}
+                             </span>
+                             
+                             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                               {appt.status !== 'Concluído' && (
+                                 <button onClick={() => handleStatusChange(appt.id, 'Concluído')} className="text-green-600 hover:bg-green-50 p-1.5 rounded" title="Marcar como Concluído">
+                                   <CheckCircle size={20} />
+                                 </button>
+                               )}
+                               {appt.status !== 'Faltou' && (
+                                 <button onClick={() => handleStatusChange(appt.id, 'Faltou')} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Marcar como Falta">
+                                   <XCircle size={20} />
+                                 </button>
+                               )}
+                               <button onClick={() => handleDelete(appt.id)} className="text-gray-400 hover:text-red-600 hover:bg-gray-100 p-1.5 rounded text-xs">
+                                 Cancelar
                                </button>
-                             )}
-                             {appt.status !== 'Faltou' && (
-                               <button onClick={() => handleStatusChange(appt.id, 'Faltou')} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Marcar como Falta">
-                                 <XCircle size={20} />
-                               </button>
-                             )}
-                             <button onClick={() => handleDelete(appt.id)} className="text-gray-400 hover:text-red-600 hover:bg-gray-100 p-1.5 rounded text-xs">
-                               Cancelar
-                             </button>
-                           </div>
+                             </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -243,7 +265,7 @@ export const Agenda: React.FC = () => {
       >
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
-            <label className="block text-sm font-bold text-gray-900 mb-1">Paciente</label>
+            <label className="block text-sm font-bold text-gray-900 mb-1">Aluno</label>
             <select
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={formData.patientId}

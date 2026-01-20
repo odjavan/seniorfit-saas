@@ -50,7 +50,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   const initChat = async () => {
     const apiKey = getApiKey();
     if (!apiKey) {
-      setMessages([{ role: 'model', text: 'Chave API não encontrada. Configure no Painel Admin ou no arquivo .env.' }]);
+      setMessages([{ role: 'model', text: 'Chave API não encontrada. Configure no Painel Admin (Integrações) ou no arquivo .env.' }]);
       return;
     }
 
@@ -74,7 +74,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       `;
 
       const initialPrompt = `
-        Analise os dados deste paciente e faça um breve resumo da condição funcional (máximo 3 linhas). 
+        Analise os dados deste aluno e faça um breve resumo da condição funcional (máximo 3 linhas). 
         Destaque pontos de atenção (sarcopenia, risco de quedas, etc) se houver. Responda em Português do Brasil.
         
         DADOS:
@@ -114,7 +114,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 
         Seja técnico e baseie-se no ACSM/NSCA. 
         Você não diagnostica doenças e não faz alterações no sistema.
-        Se o usuário relatar patologias (ex: artrose), cruze com os dados funcionais para sugerir adaptações seguras.
+        Se o aluno relatar patologias (ex: artrose), cruze com os dados funcionais para sugerir adaptações seguras.
         Responda sempre em Português do Brasil.
       `;
 

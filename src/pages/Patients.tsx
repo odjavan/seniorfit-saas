@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, User as UserIcon, Calendar, Scale, Ruler, Activity, CheckCircle2, MessageCircle } from 'lucide-react';
+import { Plus, Search, User as UserIcon, Calendar, Scale, Ruler, Activity, CheckCircle2, MessageCircle, Edit } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
@@ -18,6 +18,7 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
   
   // State for Modal visibility
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   
   // Form State
   const [formData, setFormData] = useState({
@@ -82,33 +83,41 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
     e.preventDefault();
     
     try {
-      patientService.create({
-        name: formData.name,
-        birthDate: formData.birthDate,
-        sex: formData.sex,
-        weight: parseFloat(formData.weight),
-        height: parseFloat(formData.height),
-        whatsapp: formData.whatsapp,
-        ethnicity: formData.ethnicity || undefined,
-        age: computed.age,
-        bmi: computed.bmi
-      });
+      if (editingPatient) {
+        // Update Logic
+        patientService.update({
+          ...editingPatient,
+          name: formData.name,
+          birthDate: formData.birthDate,
+          sex: formData.sex,
+          weight: parseFloat(formData.weight),
+          height: parseFloat(formData.height),
+          whatsapp: formData.whatsapp,
+          ethnicity: formData.ethnicity || undefined,
+          age: computed.age,
+          bmi: computed.bmi
+        });
+        addToast('Aluno atualizado com sucesso!', 'success');
+      } else {
+        // Create Logic
+        patientService.create({
+          name: formData.name,
+          birthDate: formData.birthDate,
+          sex: formData.sex,
+          weight: parseFloat(formData.weight),
+          height: parseFloat(formData.height),
+          whatsapp: formData.whatsapp,
+          ethnicity: formData.ethnicity || undefined,
+          age: computed.age,
+          bmi: computed.bmi
+        });
+        addToast('Aluno cadastrado com sucesso!', 'success');
+      }
 
-      // Reset form and close modal
-      setIsModalOpen(false);
-      setFormData({
-        name: '',
-        birthDate: '',
-        sex: 'M',
-        weight: '',
-        height: '',
-        whatsapp: '',
-        ethnicity: ''
-      });
+      closeModal();
       loadPatients();
-      addToast('Paciente cadastrado com sucesso!', 'success');
     } catch (error) {
-      addToast('Erro ao salvar paciente. Verifique os dados.', 'error');
+      addToast('Erro ao salvar aluno. Verifique os dados.', 'error');
     }
   };
 
@@ -119,19 +128,48 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
     return Math.min(100, Math.round((completed / 8) * 100));
   };
 
-  const openModal = () => setIsModalOpen(true);
-  const closeModal = () => setIsModalOpen(false);
+  const openModal = (patient?: Patient) => {
+    if (patient) {
+      setEditingPatient(patient);
+      setFormData({
+        name: patient.name,
+        birthDate: patient.birthDate,
+        sex: patient.sex,
+        weight: String(patient.weight),
+        height: String(patient.height),
+        whatsapp: patient.whatsapp,
+        ethnicity: patient.ethnicity || ''
+      });
+    } else {
+      setEditingPatient(null);
+      setFormData({
+        name: '',
+        birthDate: '',
+        sex: 'M',
+        weight: '',
+        height: '',
+        whatsapp: '',
+        ethnicity: ''
+      });
+    }
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingPatient(null);
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Pacientes</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Meus Alunos</h1>
           <p className="text-gray-600 mt-1">Gerencie os alunos e suas avaliações</p>
         </div>
-        <Button onClick={openModal} variant="blue">
-          <Plus size={20} className="mr-2" /> Novo Paciente
+        <Button onClick={() => openModal()} variant="blue">
+          <Plus size={20} className="mr-2" /> Novo Aluno
         </Button>
       </div>
 
@@ -142,7 +180,7 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
         </div>
         <input
           type="text"
-          placeholder="Buscar paciente por nome..."
+          placeholder="Buscar aluno por nome..."
           className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 sm:text-sm transition-colors"
           value={searchTerm}
           onChange={handleSearch}
@@ -155,11 +193,11 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
           <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
             <UserIcon size={48} />
           </div>
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum paciente cadastrado</h3>
-          <p className="mt-1 text-sm text-gray-500">Comece adicionando um novo paciente ao sistema.</p>
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum aluno cadastrado</h3>
+          <p className="mt-1 text-sm text-gray-500">Comece adicionando um novo aluno ao sistema.</p>
           <div className="mt-6">
-            <Button onClick={openModal} variant="blue">
-              <Plus size={20} className="mr-2" /> Novo Paciente
+            <Button onClick={() => openModal()} variant="blue">
+              <Plus size={20} className="mr-2" /> Novo Aluno
             </Button>
           </div>
         </div>
@@ -201,6 +239,13 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
                       </div>
                     </div>
                   </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); openModal(patient); }}
+                    className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-full transition-colors ml-2"
+                    title="Editar Aluno"
+                  >
+                    <Edit size={18} />
+                  </button>
                 </div>
                 
                 <div className="mb-4">
@@ -243,11 +288,11 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
         </div>
       )}
 
-      {/* Registration Modal */}
+      {/* Registration/Edit Modal */}
       <Modal 
         isOpen={isModalOpen} 
         onClose={closeModal}
-        title="Novo Paciente"
+        title={editingPatient ? "Editar Aluno" : "Novo Aluno"}
       >
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Personal Info */}
@@ -380,7 +425,7 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
                Cancelar
              </Button>
              <Button type="submit" variant="blue">
-               Cadastrar Paciente
+               {editingPatient ? 'Salvar Alterações' : 'Cadastrar Aluno'}
              </Button>
           </div>
         </form>

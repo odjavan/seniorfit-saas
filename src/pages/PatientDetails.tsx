@@ -192,7 +192,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
     { id: 'berg_balance', name: 'Equilíbrio (Berg)', desc: 'Avaliação do equilíbrio estático e dinâmico', icon: Scale },
   ];
 
-  // --- Protocol Descriptions ---
+  // --- Protocol Descriptions (RESTAURADO) ---
   const getProtocolInstructions = (testId: string | null) => {
     switch(testId) {
       case 'fried': return "Avalie 5 componentes: 1) Perda de peso não intencional (>4.5kg no último ano); 2) Exaustão autorrelatada; 3) Baixo nível de atividade física; 4) Diminuição da velocidade de marcha (4.6m); 5) Fraqueza muscular (Dinapometria).";

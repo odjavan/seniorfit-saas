@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { authService } from '../services/authService';
-import { IntegrationSettings } from '../types';
-import { Save, Copy, Check, Mail, DollarSign, Settings, Zap, PlayCircle, AlertTriangle, Bot, TrendingUp, Key, Bell, CreditCard, BarChart } from 'lucide-react';
+import { IntegrationSettings, User } from '../types';
+import { Save, Copy, Check, Mail, DollarSign, Settings, Zap, PlayCircle, AlertTriangle, Bot, TrendingUp, Key, Bell, CreditCard, BarChart, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 
 interface IntegrationsProps {
@@ -19,7 +19,15 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
   
   const [activeTab, setActiveTab] = useState<'eduzz' | 'emailjs' | 'gemini'>('eduzz');
   const [copied, setCopied] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
   const { addToast } = useToast();
+
+  // Real Data Stats
+  const [eduzzStats, setEduzzStats] = useState({
+    activeSubscribers: 0,
+    estimatedRevenue: 0,
+    pendingPayments: 0
+  });
 
   // Simulation State
   const [simEmail, setSimEmail] = useState('cliente@teste.com');
@@ -34,7 +42,28 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
 
   useEffect(() => {
     setSettings(authService.getIntegrationSettings());
+    calculateStats();
   }, []);
+
+  const calculateStats = () => {
+    try {
+      const users = authService.getAllUsers();
+      const subscribers = users.filter(u => u.role === 'SUBSCRIBER');
+      const active = subscribers.filter(u => u.subscriptionStatus === 'active');
+      const pending = subscribers.filter(u => u.subscriptionStatus === 'pending');
+      
+      // Cálculo Estimado (Baseado em R$ 29,90/mês por exemplo)
+      const revenue = active.length * 29.90;
+
+      setEduzzStats({
+        activeSubscribers: active.length,
+        estimatedRevenue: revenue,
+        pendingPayments: pending.length
+      });
+    } catch (e) {
+      console.error("Erro ao calcular estatísticas", e);
+    }
+  };
 
   const handleChange = (section: 'emailjs' | 'eduzz' | 'gemini', field: string, value: string) => {
     setSettings(prev => {
@@ -89,6 +118,7 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
       } else {
         addToast(`Assinante atualizado. Status: ${result.user.subscriptionStatus}`, 'success');
       }
+      calculateStats(); // Refresh dashboard
     } catch (error: any) {
       addToast(`Erro Webhook: ${error.message}`, 'error');
     }
@@ -161,13 +191,15 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
                  </div>
               </div>
 
-              {/* Dashboard Financeiro Fake */}
+              {/* Dashboard Financeiro (DADOS REAIS) */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="bg-green-50 p-4 rounded-xl border border-green-100">
                    <div className="flex justify-between items-start">
                       <div>
-                        <p className="text-xs font-bold text-green-800 uppercase">Receita (Mês)</p>
-                        <h3 className="text-2xl font-black text-gray-900 mt-1">R$ 12.450</h3>
+                        <p className="text-xs font-bold text-green-800 uppercase">Receita (Estimada)</p>
+                        <h3 className="text-2xl font-black text-gray-900 mt-1">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(eduzzStats.estimatedRevenue)}
+                        </h3>
                       </div>
                       <TrendingUp size={20} className="text-green-600" />
                    </div>
@@ -176,7 +208,7 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
                    <div className="flex justify-between items-start">
                       <div>
                         <p className="text-xs font-bold text-blue-800 uppercase">Assinaturas Ativas</p>
-                        <h3 className="text-2xl font-black text-gray-900 mt-1">{authService.getRecentSubscribersCount() + 142}</h3>
+                        <h3 className="text-2xl font-black text-gray-900 mt-1">{eduzzStats.activeSubscribers}</h3>
                       </div>
                       <CreditCard size={20} className="text-blue-600" />
                    </div>
@@ -184,8 +216,8 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
                 <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100">
                    <div className="flex justify-between items-start">
                       <div>
-                        <p className="text-xs font-bold text-yellow-800 uppercase">Aguardando Pagto</p>
-                        <h3 className="text-2xl font-black text-gray-900 mt-1">8</h3>
+                        <p className="text-xs font-bold text-yellow-800 uppercase">Pendentes</p>
+                        <h3 className="text-2xl font-black text-gray-900 mt-1">{eduzzStats.pendingPayments}</h3>
                       </div>
                       <BarChart size={20} className="text-yellow-600" />
                    </div>
@@ -286,6 +318,22 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
                  </div>
               </div>
 
+              {/* Restored CRM Guidelines */}
+              <div className="bg-purple-50 p-6 rounded-xl border border-purple-100 mb-6">
+                <h3 className="text-lg font-bold text-purple-900 mb-3 flex items-center">
+                  <Bell className="mr-2" size={20} /> Diretrizes de Notificação Push
+                </h3>
+                <p className="text-sm text-purple-800 mb-4">
+                  O sistema dispara notificações automáticas baseadas nos seguintes gatilhos de comportamento do aluno:
+                </p>
+                <ul className="list-disc list-inside space-y-2 text-sm text-purple-800">
+                  <li><strong>Inatividade (3 dias):</strong> Alerta motivacional suave para retorno aos treinos.</li>
+                  <li><strong>Inatividade (7 dias):</strong> Notificação de risco de destreino e sugestão de treino leve.</li>
+                  <li><strong>Aniversário:</strong> Mensagem personalizada de parabéns.</li>
+                  <li><strong>Renovação:</strong> Aviso de vencimento de assinatura (7 dias antes).</li>
+                </ul>
+              </div>
+
               {/* Log de Disparos Fake */}
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
                  <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
@@ -370,15 +418,24 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
                    <h3 className="font-bold text-gray-900 mb-4 flex items-center">
                       <Key size={18} className="mr-2 text-indigo-600" /> Google Gemini API Key
                    </h3>
-                   <div className="space-y-2">
+                   <div className="space-y-2 relative">
                       <Input 
                         label="Chave de API (Começa com AIza...)" 
-                        type="password"
+                        type={showGeminiKey ? "text" : "password"}
                         placeholder="Cole sua chave aqui..." 
                         value={settings.gemini.apiKey}
                         onChange={(e) => handleChange('gemini', 'apiKey', e.target.value)}
                       />
-                      <p className="text-xs text-gray-500">
+                      <button 
+                        type="button"
+                        onClick={() => setShowGeminiKey(!showGeminiKey)}
+                        className="absolute right-3 top-[32px] text-gray-500 hover:text-gray-700"
+                        title={showGeminiKey ? "Ocultar chave" : "Mostrar chave"}
+                      >
+                        {showGeminiKey ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                      
+                      <p className="text-xs text-gray-500 mt-1">
                         Não tem uma chave? <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Gere uma gratuitamente no Google AI Studio</a>.
                       </p>
                    </div>
@@ -387,7 +444,7 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
                 <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-sm text-indigo-800 flex gap-3">
                   <div className="mt-0.5"><Bot size={20} /></div>
                   <div>
-                    <strong>Tutor Ativo:</strong> Ao salvar a chave, o Tutor IA estará disponível na tela de Detalhes do Paciente para auxiliar na interpretação de exames e prescrição de treinos.
+                    <strong>Tutor Ativo:</strong> Ao salvar a chave, o Tutor IA estará disponível na tela de Detalhes do Aluno para auxiliar na interpretação de exames e prescrição de treinos.
                   </div>
                 </div>
               </div>

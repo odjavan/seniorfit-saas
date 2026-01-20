@@ -175,7 +175,7 @@ function AppContent() {
           />
         )}
 
-        {/* Treinamento mantido como rota oculta/legado caso precise reativar */}
+        {/* Treinamento oculto, mas mantido para integridade se acessado via URL direta/state antigo */}
         {currentView === 'training' && (
           <TrainingDashboard />
         )}
@@ -206,7 +206,7 @@ function AppContent() {
                  </div>
                )}
                <div className="text-center text-xs text-gray-400 pt-4 border-t border-gray-100">
-                 Versão 1.28.4 (Master Final)
+                 Versão 1.28.5 (Master Final)
                </div>
             </div>
          </Modal>

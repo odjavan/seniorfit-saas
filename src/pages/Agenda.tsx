@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, Plus, User, Phone, CheckCircle, XCircle, MessageCircle, AlertCircle, ClipboardList } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Plus, User, Phone, CheckCircle, XCircle, MessageCircle, AlertCircle, ClipboardList, Trash2 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
@@ -9,7 +9,6 @@ import { Appointment, Patient } from '../types';
 import { useToast } from '../contexts/ToastContext';
 
 export const Agenda: React.FC = () => {
-  // Inicialização segura
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const { addToast } = useToast();
@@ -25,20 +24,34 @@ export const Agenda: React.FC = () => {
   });
 
   useEffect(() => {
-    loadData();
+    loadAndSanitizeData();
   }, []);
 
-  const loadData = () => {
+  const loadAndSanitizeData = () => {
     try {
-      const appts = agendaService.getAll();
-      // Garantia de Array
-      setAppointments(Array.isArray(appts) ? appts : []);
+      // 1. Carregamento Seguro
+      const rawAppts = agendaService.getAll();
+      const safeAppts = Array.isArray(rawAppts) ? rawAppts : [];
+      
+      // 2. Protocolo de Saneamento (Data Cleaning)
+      // Remove agendamentos com datas inválidas ou formatos legados que quebram o React
+      const validAppts = safeAppts.filter(appt => {
+        if (!appt.dateTime) return false;
+        const timestamp = new Date(appt.dateTime).getTime();
+        return !isNaN(timestamp); // Mantém apenas se for uma data válida
+      });
+
+      if (validAppts.length < safeAppts.length) {
+        console.warn(`Agenda: ${safeAppts.length - validAppts.length} registros corrompidos foram removidos para evitar crash.`);
+      }
+
+      setAppointments(validAppts);
       
       const pts = patientService.getAll();
       setPatients(Array.isArray(pts) ? pts : []);
     } catch (e) {
-      console.error("Erro fatal ao carregar agenda", e);
-      setAppointments([]);
+      console.error("ERRO CRÍTICO NA AGENDA. Resetando visualização.", e);
+      setAppointments([]); // Fail-safe: Tela vazia é melhor que tela branca
     }
   };
 
@@ -53,7 +66,7 @@ export const Agenda: React.FC = () => {
         patientId: patient.id,
         patientName: patient.name,
         patientPhone: patient.whatsapp,
-        dateTime: `${formData.date}T${formData.time}`,
+        dateTime: `${formData.date}T${formData.time}`, // ISO Format Forced
         type: formData.type,
         status: 'Agendado',
         notes: formData.notes
@@ -61,7 +74,7 @@ export const Agenda: React.FC = () => {
       
       setIsModalOpen(false);
       setFormData({ patientId: '', date: '', time: '', type: 'Avaliação Inicial', notes: '' });
-      loadData();
+      loadAndSanitizeData();
       addToast('Agendamento realizado com sucesso!', 'success');
     } catch (error: any) {
       addToast(error.message, 'warning');
@@ -70,15 +83,15 @@ export const Agenda: React.FC = () => {
 
   const handleStatusChange = (id: string, newStatus: Appointment['status']) => {
     agendaService.updateStatus(id, newStatus);
-    loadData();
+    loadAndSanitizeData();
     addToast('Status atualizado.', 'info');
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm('Tem certeza que deseja cancelar este agendamento?')) {
+    if (window.confirm('Tem certeza que deseja remover este agendamento?')) {
       agendaService.delete(id);
-      loadData();
-      addToast('Agendamento cancelado.', 'success');
+      loadAndSanitizeData();
+      addToast('Agendamento removido.', 'success');
     }
   };
 
@@ -98,27 +111,22 @@ export const Agenda: React.FC = () => {
     return pending.map(id => testNames[id]);
   };
 
-  // Lógica de Agrupamento Blindada (ISO Dates)
-  // Usa o formato YYYY-MM-DD como chave para garantir ordenação correta sem depender do locale do browser
-  const groupedAppointments = (appointments || []).reduce((groups, appt) => {
-    if (!appt || !appt.dateTime) return groups;
+  // Agrupamento Seguro por Data ISO (YYYY-MM-DD)
+  const groupedAppointments = appointments.reduce((groups, appt) => {
     try {
-      // Extrai apenas a parte da data YYYY-MM-DD da string ISO
-      const dateKey = appt.dateTime.split('T')[0]; 
+      const dateKey = appt.dateTime.split('T')[0];
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(appt);
     } catch (e) {
-      // Ignora datas inválidas silenciosamente para não travar a UI
+      // Ignora silenciosamente registros mal formados durante o reduce
     }
     return groups;
   }, {} as Record<string, Appointment[]>);
 
-  // Ordenação de chaves (Datas ISO são ordenáveis alfabeticamente de forma correta)
   const sortedDates = Object.keys(groupedAppointments).sort();
 
   const formatDateHeader = (isoDateString: string) => {
     try {
-      // Cria a data no fuso local mas baseada nos componentes da string para evitar shift de timezone
       const [year, month, day] = isoDateString.split('-').map(Number);
       const date = new Date(year, month - 1, day);
       return {
@@ -154,13 +162,13 @@ export const Agenda: React.FC = () => {
         </Button>
       </div>
 
-      {(!appointments || appointments.length === 0) ? (
+      {appointments.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-xl border border-gray-200 border-dashed">
           <div className="mx-auto h-16 w-16 text-gray-300 mb-4 bg-gray-50 rounded-full flex items-center justify-center">
             <CalendarIcon size={32} />
           </div>
           <h3 className="text-lg font-medium text-gray-900">Agenda Vazia</h3>
-          <p className="text-gray-500 max-w-sm mx-auto mt-1 mb-6">Nenhum compromisso agendado. Comece marcando sua primeira avaliação.</p>
+          <p className="text-gray-500 max-w-sm mx-auto mt-1 mb-6">Nenhum compromisso agendado.</p>
           <Button onClick={() => setIsModalOpen(true)} variant="outline">
             Agendar Agora
           </Button>
@@ -187,7 +195,6 @@ export const Agenda: React.FC = () => {
                       <div key={appt.id} className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all relative group">
                         <div className="flex flex-col sm:flex-row justify-between gap-4">
                           
-                          {/* Left: Time & Type */}
                           <div className="flex gap-4">
                             <div className="flex flex-col items-center justify-center min-w-[60px] border-r border-gray-100 pr-4">
                               <span className="text-lg font-bold text-gray-900">
@@ -210,7 +217,6 @@ export const Agenda: React.FC = () => {
                                </div>
                                <p className="text-sm text-gray-600 font-medium">{appt.type}</p>
                                
-                               {/* Pending Tests Info */}
                                {isEval && pendingTests.length > 0 && appt.status !== 'Concluído' && (
                                  <div className="mt-2 flex items-start gap-1.5 text-xs text-orange-700 bg-orange-50 p-2 rounded-md border border-orange-100 max-w-sm">
                                    <ClipboardList size={14} className="mt-0.5 shrink-0" />
@@ -225,7 +231,6 @@ export const Agenda: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* Right: Status & Actions */}
                           <div className="flex flex-col items-end gap-3">
                              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${getStatusColor(appt.status)}`}>
                                {appt.status}
@@ -233,17 +238,17 @@ export const Agenda: React.FC = () => {
                              
                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                {appt.status !== 'Concluído' && (
-                                 <button onClick={() => handleStatusChange(appt.id, 'Concluído')} className="text-green-600 hover:bg-green-50 p-1.5 rounded" title="Marcar como Concluído">
+                                 <button onClick={() => handleStatusChange(appt.id, 'Concluído')} className="text-green-600 hover:bg-green-50 p-1.5 rounded" title="Concluir">
                                    <CheckCircle size={20} />
                                  </button>
                                )}
                                {appt.status !== 'Faltou' && (
-                                 <button onClick={() => handleStatusChange(appt.id, 'Faltou')} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Marcar como Falta">
+                                 <button onClick={() => handleStatusChange(appt.id, 'Faltou')} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Faltou">
                                    <XCircle size={20} />
                                  </button>
                                )}
-                               <button onClick={() => handleDelete(appt.id)} className="text-gray-400 hover:text-red-600 hover:bg-gray-100 p-1.5 rounded text-xs">
-                                 Cancelar
+                               <button onClick={() => handleDelete(appt.id)} className="text-gray-400 hover:text-red-600 hover:bg-gray-100 p-1.5 rounded text-xs" title="Excluir">
+                                 <Trash2 size={20} />
                                </button>
                              </div>
                           </div>

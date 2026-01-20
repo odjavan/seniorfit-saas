@@ -69,23 +69,34 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
     setComputed({ age: Math.max(0, age), bmi });
   }, [formData.birthDate, formData.weight, formData.height]);
 
-  const loadPatients = () => {
-    setPatients(patientService.getAll());
+  const loadPatients = async () => {
+    try {
+      const data = await patientService.getAll();
+      setPatients(data);
+    } catch (error) {
+      console.error("Erro ao carregar pacientes", error);
+      setPatients([]);
+    }
   };
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
     setSearchTerm(term);
-    setPatients(patientService.search(term));
+    try {
+      const data = await patientService.search(term);
+      setPatients(data);
+    } catch (error) {
+      console.error("Erro na busca", error);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
       if (editingPatient) {
-        // Update Logic
-        patientService.update({
+        // Update Logic (Async)
+        await patientService.update({
           ...editingPatient,
           name: formData.name,
           birthDate: formData.birthDate,
@@ -99,8 +110,8 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
         });
         addToast('Aluno atualizado com sucesso!', 'success');
       } else {
-        // Create Logic
-        patientService.create({
+        // Create Logic (Async)
+        await patientService.create({
           name: formData.name,
           birthDate: formData.birthDate,
           sex: formData.sex,
@@ -115,7 +126,7 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
       }
 
       closeModal();
-      loadPatients();
+      loadPatients(); // Reload list
     } catch (error) {
       addToast('Erro ao salvar aluno. Verifique os dados.', 'error');
     }

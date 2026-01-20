@@ -24,25 +24,44 @@ function AppContent() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [currentView, setCurrentView] = useState<ViewState>('patients');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   
   // Install/Help Modal States
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [helpVideoUrl, setHelpVideoUrl] = useState('');
 
-  const getSelectedPatient = () => {
-    if (!selectedPatientId) return null;
-    return patientService.getById(selectedPatientId);
-  };
+  useEffect(() => {
+    const fetchPatient = async () => {
+      if (selectedPatientId) {
+        try {
+          // Await explícito aqui
+          const p = await patientService.getById(selectedPatientId);
+          setSelectedPatient(p);
+        } catch (error) {
+          console.error("Failed to fetch patient", error);
+          setSelectedPatient(null);
+        }
+      } else {
+        setSelectedPatient(null);
+      }
+    };
+    fetchPatient();
+  }, [selectedPatientId]);
 
   useEffect(() => {
-    const initAuth = () => {
-      // Blindagem de Inicialização do Admin
-      const storedUser = authService.getCurrentUser();
-      if (storedUser) {
-        setUser(storedUser);
+    const initAuth = async () => {
+      try {
+        // Await explícito para a sessão do Supabase
+        const storedUser = await authService.getCurrentUser();
+        if (storedUser) {
+          setUser(storedUser);
+        }
+      } catch (error) {
+        console.error("Auth init error:", error);
+      } finally {
+        setIsInitializing(false);
       }
-      setIsInitializing(false);
     };
     initAuth();
   }, []);
@@ -51,12 +70,10 @@ function AppContent() {
   useEffect(() => {
     if (user && !isInitializing) {
       if (user.role === 'ADMIN') {
-        // Se entrar como admin e estiver na home default, joga pro dashboard
         if (currentView === 'patients') {
             setCurrentView('admin-dashboard');
         }
       } else {
-        // Se não for admin, garante que não está em rota proibida
         const adminOnlyViews = ['admin-dashboard', 'admin-settings', 'subscribers', 'integrations', 'eduzz', 'crm'];
         if (adminOnlyViews.includes(currentView)) {
            setCurrentView('patients');
@@ -69,20 +86,25 @@ function AppContent() {
     setUser(loggedInUser);
   };
 
-  const handleLogout = () => {
-    authService.logout();
+  const handleLogout = async () => {
+    await authService.logout();
     setUser(null);
     setCurrentView('patients');
   };
   
-  const toggleHelp = () => {
-    const settings = authService.getSettings();
-    setHelpVideoUrl(settings.howToInstallVideoUrl);
-    setShowInstallHelp(!showInstallHelp);
+  const toggleHelp = async () => {
+    try {
+      // Await para buscar configurações do banco
+      const settings = await authService.getSettings();
+      setHelpVideoUrl(settings.howToInstallVideoUrl);
+      setShowInstallHelp(!showInstallHelp);
+    } catch (error) {
+      console.error("Error loading help video url", error);
+      setShowInstallHelp(!showInstallHelp);
+    }
   };
 
   const handleNavigate = (view: ViewState) => {
-    // Guardião de Rotas Administrativas
     const adminViews = ['admin-settings', 'admin-dashboard', 'subscribers', 'integrations', 'eduzz', 'crm'];
     
     if (adminViews.includes(view) && user?.role !== 'ADMIN') {
@@ -102,7 +124,7 @@ function AppContent() {
   };
 
   const handleUpdatePatient = (updatedPatient: Patient) => {
-    // State update handled by re-render triggered by service update
+    setSelectedPatient(updatedPatient);
   };
 
   const getEmbedUrl = (url: string) => {
@@ -151,7 +173,6 @@ function AppContent() {
             {currentView === 'admin-settings' && <AdminPanel />}
             {currentView === 'subscribers' && <Subscribers />}
             
-            {/* Rota unificada para Integrações, Eduzz e CRM */}
             {(currentView === 'integrations' || currentView === 'eduzz' || currentView === 'crm') && (
               <Integrations activeView={currentView} />
             )}
@@ -167,15 +188,20 @@ function AppContent() {
           <Patients onSelectPatient={handleSelectPatient} />
         )}
         
-        {currentView === 'patient-details' && selectedPatientId && (
+        {currentView === 'patient-details' && selectedPatientId && selectedPatient && (
           <PatientDetails 
-            patient={getSelectedPatient()!} 
+            patient={selectedPatient} 
             onBack={() => handleNavigate('patients')}
             onUpdate={handleUpdatePatient}
           />
         )}
+        
+        {currentView === 'patient-details' && selectedPatientId && !selectedPatient && (
+             <div className="flex items-center justify-center h-full pt-20">
+               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+             </div>
+        )}
 
-        {/* Treinamento oculto, mas mantido para integridade se acessado via URL direta/state antigo */}
         {currentView === 'training' && (
           <TrainingDashboard />
         )}

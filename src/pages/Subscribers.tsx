@@ -30,8 +30,19 @@ export const Subscribers: React.FC = () => {
     loadUsers();
   }, []);
 
-  const loadUsers = () => {
-    setUsers(authService.getAllUsers());
+  const loadUsers = async () => {
+    try {
+      // Await obrigatório pois getAllUsers retorna Promise<User[]>
+      const data = await authService.getAllUsers();
+      if (Array.isArray(data)) {
+        setUsers(data);
+      } else {
+        setUsers([]);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar assinantes", error);
+      setUsers([]);
+    }
   };
 
   const filteredUsers = users.filter(user => 
@@ -64,7 +75,7 @@ export const Subscribers: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const userData = {
@@ -77,14 +88,16 @@ export const Subscribers: React.FC = () => {
       };
 
       if (editingUser) {
-        authService.updateUser({ ...editingUser, ...userData });
+        // Await necessário para update
+        await authService.updateUser({ ...editingUser, ...userData });
         addToast('Assinante atualizado com sucesso!', 'success');
       } else {
-        authService.createUser(userData);
+        // Await necessário para create
+        await authService.createUser(userData);
         addToast('Assinante criado com sucesso!', 'success');
       }
       setIsModalOpen(false);
-      loadUsers();
+      loadUsers(); // Recarrega lista
     } catch (error: any) {
       addToast(error.message, 'error');
     }

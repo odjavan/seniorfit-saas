@@ -23,10 +23,11 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Acesso seguro à chave API (Prioridade: Settings do Admin > Env Var)
-  const getApiKey = () => {
+  // Acesso seguro à chave API (Prioridade: Settings do Banco > Env Var)
+  // Agora é estritamente assíncrono para garantir que a Promise resolve
+  const getApiKey = async () => {
     try {
-      const settings = authService.getIntegrationSettings();
+      const settings = await authService.getIntegrationSettings();
       if (settings.gemini?.apiKey) return settings.gemini.apiKey;
       return import.meta.env.VITE_GEMINI_API_KEY || '';
     } catch (e) {
@@ -48,7 +49,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   }, [isOpen]);
 
   const initChat = async () => {
-    const apiKey = getApiKey();
+    // Await crucial aqui
+    const apiKey = await getApiKey();
     if (!apiKey) {
       setMessages([{ role: 'model', text: 'Chave API não encontrada. Configure no Painel Admin (Integrações) ou no arquivo .env.' }]);
       return;
@@ -95,7 +97,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   };
 
   const sendMessageToGemini = async (text: string) => {
-    const apiKey = getApiKey();
+    // Await crucial aqui
+    const apiKey = await getApiKey();
     
     if (!apiKey) {
       setMessages(prev => [...prev, { role: 'model', text: "Chave API não encontrada." }]);
@@ -118,7 +121,6 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         Responda sempre em Português do Brasil.
       `;
 
-      // Simulação de histórico enviando contexto + histórico recente no prompt (versão stateless simplificada para estabilidade)
       const promptToSend = `${systemInstruction}\n\nTreinador pergunta: ${text}`;
 
       const result = await model.generateContent(promptToSend);

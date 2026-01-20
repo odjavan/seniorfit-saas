@@ -35,6 +35,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     try {
+      // Login é async agora (Supabase)
       const user = await authService.login(email, password);
       onLoginSuccess(user);
     } catch (err: any) {
@@ -48,18 +49,20 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     e.preventDefault();
     if (!recoveryEmail) return;
     
-    // Verificação local de usuário
-    const users = authService.getAllUsers();
-    const userExists = users.find(u => u.email.toLowerCase() === recoveryEmail.toLowerCase());
-
-    if (!userExists) {
-      addToast('E-mail não encontrado no sistema. Verifique a digitação.', 'warning');
-      return;
-    }
-
     setIsSendingRecovery(true);
     
     try {
+      // Busca de usuários é async (Supabase)
+      const users = await authService.getAllUsers();
+      const userExists = users.find(u => u.email.toLowerCase() === recoveryEmail.toLowerCase());
+
+      if (!userExists) {
+        addToast('E-mail não encontrado no sistema. Verifique a digitação.', 'warning');
+        setIsSendingRecovery(false);
+        return;
+      }
+
+      // Envio de email é async
       await emailService.sendRecovery(recoveryEmail);
       addToast(`Instruções enviadas para ${recoveryEmail}`, 'success');
       setIsRecoveryOpen(false);

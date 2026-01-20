@@ -11,9 +11,15 @@ export const emailService = {
     // 2. Log de Auditoria
     console.log('Preparando envio para:', email);
 
-    // 3. Recuperar senha/hint baseada na lógica do Auth Mock
-    // O sistema não salva senhas, mas segue regras: Admin='admin', Assinante=CPF, Outros='123456'
-    const users = authService.getAllUsers();
+    // 3. Recuperar senha/hint
+    // Await explícito para garantir que recebemos o array de usuários e não uma Promise
+    const users = await authService.getAllUsers();
+    
+    // Verificação de segurança caso o serviço retorne algo inesperado
+    if (!Array.isArray(users)) {
+        throw new Error('Erro interno ao verificar usuários.');
+    }
+
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
     let passwordHint = '123456'; // Senha padrão
@@ -26,7 +32,8 @@ export const emailService = {
         }
     }
 
-    const settings = authService.getIntegrationSettings();
+    // Await explícito para configurações
+    const settings = await authService.getIntegrationSettings();
     const { serviceId, templateIdRecovery, publicKey } = settings.emailjs;
 
     console.log("Configurações EmailJS carregadas:", { 
@@ -46,8 +53,7 @@ export const emailService = {
       // 5. Construção do Link/Código
       const resetLink = `${window.location.origin}/reset-password-mock?email=${encodeURIComponent(email)}`;
 
-      // 6. Mapeamento Estrito de Variáveis (Conforme solicitado)
-      // Template espera: {{email}}, {{user_password}}, {{passcode}}
+      // 6. Mapeamento Estrito de Variáveis
       const templateParams = {
         email: email,               // Destinatário
         user_password: passwordHint, // A senha recuperada (ou lógica de senha)

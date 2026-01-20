@@ -8,8 +8,23 @@ export const emailService = {
         throw new Error('O endereço de e-mail é obrigatório para o envio.');
     }
 
-    // 2. Log de Segurança (Auditoria)
+    // 2. Log de Auditoria
     console.log('Preparando envio para:', email);
+
+    // 3. Recuperar senha/hint baseada na lógica do Auth Mock
+    // O sistema não salva senhas, mas segue regras: Admin='admin', Assinante=CPF, Outros='123456'
+    const users = authService.getAllUsers();
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    
+    let passwordHint = '123456'; // Senha padrão
+    if (user) {
+        if (user.role === 'ADMIN' && user.email === 'admin@seniorfit.com') {
+            passwordHint = 'admin';
+        } else if (user.cpf) {
+            // Regra Eduzz: Senha é o CPF (apenas números)
+            passwordHint = user.cpf.replace(/\D/g, '');
+        }
+    }
 
     const settings = authService.getIntegrationSettings();
     const { serviceId, templateIdRecovery, publicKey } = settings.emailjs;
@@ -25,23 +40,23 @@ export const emailService = {
     }
 
     try {
-      // 3. Inicialização Explícita
+      // 4. Inicialização Explícita
       emailjs.init(publicKey);
 
-      // 4. Construção do Link de Recuperação
-      const recoveryLink = `${window.location.origin}/reset-password-mock?email=${encodeURIComponent(email)}`;
+      // 5. Construção do Link/Código
+      const resetLink = `${window.location.origin}/reset-password-mock?email=${encodeURIComponent(email)}`;
 
-      // 5. Mapeamento de Variáveis
-      // Certifique-se que no EmailJS o template usa {{to_email}} no campo "To Email"
+      // 6. Mapeamento Estrito de Variáveis (Conforme solicitado)
+      // Template espera: {{email}}, {{user_password}}, {{passcode}}
       const templateParams = {
-        to_email: email, 
-        to_name: email.split('@')[0], 
-        link: recoveryLink,
-        message: 'Você solicitou a recuperação de senha do SeniorFit. Clique no link abaixo para redefinir.',
-        reply_to: 'suporte@seniorfit.com'
+        email: email,               // Destinatário
+        user_password: passwordHint, // A senha recuperada (ou lógica de senha)
+        passcode: resetLink         // O link ou código
       };
 
-      // 6. Envio
+      console.log('Enviando payload:', templateParams);
+
+      // 7. Envio
       const response = await emailjs.send(
         serviceId,
         templateIdRecovery,
@@ -53,9 +68,8 @@ export const emailService = {
     } catch (error: any) {
       console.error("ERRO CRÍTICO EMAILJS:", error);
       
-      // Tratamento específico para erro de destinatário
       if (error.text && error.text.includes('recipients address is empty')) {
-         throw new Error('O EmailJS rejeitou o destinatário. Verifique se o template usa a variável {{to_email}} no campo "To Email".');
+         throw new Error('O EmailJS rejeitou o destinatário. Verifique se o campo "To Email" no template está configurado EXATAMENTE como {{email}}.');
       }
 
       const errorText = error.text || error.message || JSON.stringify(error);

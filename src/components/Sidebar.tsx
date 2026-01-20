@@ -16,9 +16,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
     menuItems = [
       { id: 'admin-dashboard', label: 'Painel Master', icon: BarChart3 },
       { id: 'subscribers', label: 'Gestão Assinantes', icon: Users },
-      { id: 'patients', label: 'Pacientes (Clínica)', icon: Database }, 
+      { id: 'patients', label: 'Meus Alunos', icon: Database }, 
       { id: 'agenda', label: 'Agenda Master', icon: Calendar },
-      { id: 'training', label: 'Treinamento', icon: Dumbbell },
+      // Treinamento Removido conforme solicitação
       { id: 'integrations', label: 'Integrações & IA', icon: Zap },
       { id: 'eduzz', label: 'Eduzz Financeiro', icon: DollarSign },
       { id: 'crm', label: 'CRM & Notificações', icon: Bell },
@@ -27,9 +27,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
   } else {
     // Menu para Treinadores/Personais e Assinantes
     menuItems = [
-      { id: 'patients', label: 'Pacientes', icon: Users },
+      { id: 'patients', label: 'Meus Alunos', icon: Users },
       { id: 'agenda', label: 'Agenda', icon: Calendar },
-      { id: 'training', label: 'Treinamento', icon: Dumbbell },
+      // Treinamento Removido conforme solicitação
     ];
   }
 
@@ -68,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       {/* Rodapé da Sidebar */}
       <div className="absolute bottom-0 w-full p-4 border-t border-gray-100 bg-gray-50">
         <div className="text-xs text-center text-gray-400">
-          SeniorFit v1.28.3 (Secure)
+          SeniorFit v1.28.4
         </div>
       </div>
     </aside>

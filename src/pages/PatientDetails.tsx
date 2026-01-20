@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, AlertCircle, CheckCircle2, UserCheck, Scale, Brain, 
   Heart, Activity, Move, Dumbbell, TrendingUp, ChevronLeft, ClipboardList,
-  Timer, Play, Pause, RotateCcw, Minus, Plus, Printer, Bot, Sparkles, MessageCircle
+  Timer, Play, Pause, RotateCcw, Minus, Plus, Printer, Bot, Sparkles, MessageCircle, FileText
 } from 'lucide-react';
 import { Patient, Screening, TestStatus, FragilityResult, TUGResult, ChairStandResult, ArmCurlResult, FlexibilityResult, DepressionResult, CognitiveResult, BalanceResult, AssessmentHistoryEntry } from '../types';
 import { Button } from '../components/Button';
@@ -192,6 +192,21 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
     { id: 'berg_balance', name: 'Equilíbrio (Berg)', desc: 'Avaliação do equilíbrio estático e dinâmico', icon: Scale },
   ];
 
+  // --- Protocol Descriptions ---
+  const getProtocolInstructions = (testId: string | null) => {
+    switch(testId) {
+      case 'fried': return "Avalie 5 componentes: 1) Perda de peso não intencional (>4.5kg no último ano); 2) Exaustão autorrelatada; 3) Baixo nível de atividade física; 4) Diminuição da velocidade de marcha (4.6m); 5) Fraqueza muscular (Dinapometria).";
+      case 'tug': return "O aluno inicia sentado com as costas apoiadas. Ao comando 'VÁ', deve levantar-se, caminhar 3 metros, virar-se, voltar à cadeira e sentar-se. O cronômetro para quando as costas tocam o encosto novamente.";
+      case 'sit_stand_30': return "O aluno inicia sentado. Ao sinal, deve levantar-se totalmente e sentar-se o maior número de vezes possível em 30 segundos, com os braços cruzados no peito. Conte apenas as execuções completas.";
+      case 'arm_curl': return "Sentado, segurando um peso (4kg para homens, 2kg para mulheres). Realizar o máximo de flexões de cotovelo (rosca bíceps) em 30 segundos na amplitude completa.";
+      case 'sit_reach': return "Sentado na ponta da cadeira, uma perna estendida (calcanhar no chão, pé fletido). Com as mãos sobrepostas, tentar alcançar a ponta do pé. Medir a distância entre os dedos e a ponta do pé (negativo se não alcançar, positivo se passar).";
+      case 'gds15': return "Aplique as 15 perguntas da Escala de Depressão Geriátrica. Respostas em negrito indicam pontuação. Score >= 6 sugere depressão.";
+      case 'meem_cognitive': return "Mini Exame do Estado Mental. Avalie Orientação, Registro, Atenção/Cálculo, Evocação e Linguagem. Ajuste a pontuação de corte baseada na escolaridade selecionada.";
+      case 'berg_balance': return "Escala de Equilíbrio de Berg. 14 tarefas comuns da vida diária. Avalie cada item de 0 (incapaz) a 4 (capaz/seguro). Score total máximo de 56 pontos.";
+      default: return "Selecione um teste para visualizar as instruções detalhadas do protocolo.";
+    }
+  };
+
   // --- Triage Logic ---
 
   const handleToggle = (key: keyof Screening, value: boolean) => {
@@ -307,7 +322,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
     if ('classification' in result) classification = result.classification;
 
     const historyEntry: AssessmentHistoryEntry = {
-      id: generateId(), // FIXED: replaced crypto.randomUUID()
+      id: generateId(),
       date: new Date().toISOString(),
       testId,
       testName,
@@ -613,12 +628,12 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
           <button 
             onClick={onBack}
             className="mr-4 p-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
-            title="Voltar para a lista de pacientes"
+            title="Voltar para a lista de alunos"
           >
             <ArrowLeft size={24} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Avaliação de {patient.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Avaliação: {patient.name}</h1>
             <div className="text-gray-600 flex items-center gap-3 mt-1 text-sm">
               <span>{patient.age} anos • IMC {patient.bmi} • {patient.sex === 'M' ? 'Masculino' : 'Feminino'}</span>
               <span className="text-gray-300">|</span>
@@ -637,7 +652,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
 
         <div className="flex gap-2">
           {/* AI Tutor Button */}
-          <Button variant="secondary" onClick={() => setIsAiTutorOpen(true)} className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 hover:text-indigo-900">
+          <Button variant="secondary" onClick={() => setIsAiTutorOpen(true)} className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 hover:text-indigo-900 border-indigo-200">
              <Bot size={18} className="mr-2" />
              AI TUTOR
           </Button>
@@ -657,7 +672,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
             </div>
             <div>
               <h2 className="text-xl font-bold text-gray-900">TRIAGEM INICIAL</h2>
-              <p className="text-sm text-gray-600">Coleta Funcional</p>
+              <p className="text-sm text-gray-600">Coleta Funcional do Aluno</p>
             </div>
           </div>
           
@@ -691,7 +706,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
              <h2 className="text-2xl font-bold text-gray-900">SELEÇÃO DE TESTES</h2>
              <button onClick={() => setViewMode('triage')} className="text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline">Editar Triagem</button>
           </div>
-          <p className="text-gray-600 -mt-4">Selecione os protocolos indicados para a avaliação deste paciente.</p>
+          <p className="text-gray-600 -mt-4">Selecione os protocolos indicados para a avaliação deste aluno.</p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {testProtocols.map((test) => {
@@ -756,7 +771,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <button onClick={() => setViewMode('tests')} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"><ChevronLeft size={20} className="mr-1" /> Voltar para Seleção</button>
-            <Button variant="outline" onClick={() => setShowProtocolModal(true)} className="flex items-center gap-2"><ClipboardList size={18} /> PROTOCOLO</Button>
+            <Button variant="outline" onClick={() => setShowProtocolModal(true)} className="flex items-center gap-2 border-gray-300 shadow-sm"><FileText size={18} /> INSTRUÇÕES DO TESTE</Button>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -798,7 +813,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                   <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveFried} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>
                 </>
               )}
-              {/* Other tests logic remains same but using updated saveTestResult which uses Toast */}
               {/* TUG UI */}
               {activeTestId === 'tug' && (
                 <>
@@ -947,7 +961,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
               {activeTestId === 'meem_cognitive' && (
                 <>
                   <div className="bg-blue-50 p-5 rounded-lg border border-blue-100 mb-6">
-                     <h3 className="text-lg font-bold text-blue-900 mb-2">1. Escolaridade do Paciente</h3>
+                     <h3 className="text-lg font-bold text-blue-900 mb-2">1. Escolaridade do Aluno</h3>
                      <select className="w-full rounded-md border-blue-200 focus:border-blue-500 focus:ring focus:ring-blue-200 py-3 text-base" value={educationLevel} onChange={(e) => setEducationLevel(e.target.value as any)}>
                        <option value="" disabled>Selecione a escolaridade...</option>
                        <option value="analfabeto">Analfabeto (Corte: 20)</option>
@@ -988,7 +1002,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
               {/* BERG BALANCE UI */}
               {activeTestId === 'berg_balance' && (
                 <>
-                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-sm text-yellow-800 mb-6">Avalie cada item de 0 (incapaz) a 4 (normal) conforme desempenho do paciente. Consulte o protocolo para critérios exatos.</div>
+                  <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 text-sm text-yellow-800 mb-6">Avalie cada item de 0 (incapaz) a 4 (normal) conforme desempenho do aluno. Consulte o protocolo para critérios exatos.</div>
                   <div className="space-y-3">
                     {bergItems.map((item, index) => (
                       <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-3 border-b border-gray-50 last:border-0">
@@ -1013,12 +1027,19 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
         </div>
       )}
 
-      {/* Protocol Modal and Report Modal remain same content */}
-      {/* ... */}
-      <Modal isOpen={showProtocolModal} onClose={() => setShowProtocolModal(false)} title="Protocolo">
-        {/* Protocol content... same as before */}
-        <div className="text-center p-4">
-           Consulte as instruções detalhadas na tela anterior ou no manual do SeniorFit.
+      <Modal isOpen={showProtocolModal} onClose={() => setShowProtocolModal(false)} title="Instruções do Protocolo">
+        <div className="p-6">
+           <div className="bg-blue-50 border border-blue-100 rounded-lg p-6 mb-6">
+             <h4 className="text-lg font-bold text-blue-900 mb-2">{getCurrentTestName()}</h4>
+             <p className="text-gray-700 leading-relaxed">
+               {getProtocolInstructions(activeTestId)}
+             </p>
+           </div>
+           
+           <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
+             <p className="font-bold mb-1">Dica de Segurança:</p>
+             <p>Sempre realize os testes próximos a uma parede ou com suporte para garantir a segurança do aluno em caso de desequilíbrio.</p>
+           </div>
         </div>
       </Modal>
 

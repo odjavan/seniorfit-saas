@@ -9,12 +9,12 @@ const STORAGE_KEYS = {
   INTEGRATIONS: 'sf_integrations',
 };
 
-// Mock admin for initialization - Garantia de acesso
+// Mock admin for initialization - A CONSTANTE MESTRA
 const MOCK_ADMIN: User = {
   id: 'admin-001',
   email: 'admin@seniorfit.com',
   name: 'Administrador Master',
-  role: 'ADMIN',
+  role: 'ADMIN', // Esta regra é imutável
   createdAt: new Date().toISOString(),
   subscriptionStatus: 'active'
 };
@@ -48,16 +48,20 @@ export const authService = {
       let users: User[] = data ? JSON.parse(data) : [];
       
       // Verificação de Integridade: Admin deve sempre existir
-      const adminExists = users.some(u => u.email === MOCK_ADMIN.email);
+      const adminIndex = users.findIndex(u => u.email === MOCK_ADMIN.email);
       
-      if (!adminExists) {
+      if (adminIndex === -1) {
         console.log("Inicializando sistema: Criando Admin padrão.");
         users.unshift(MOCK_ADMIN);
+        localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
+      } else if (users[adminIndex].role !== 'ADMIN') {
+        // Correção de integridade da base de dados
+        console.warn("Corrigindo role do Admin na base de dados.");
+        users[adminIndex].role = 'ADMIN';
         localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
       }
       return users;
     } catch (error) {
-      // Fallback de segurança se o JSON estiver corrompido
       console.error("Erro no armazenamento de usuários. Resetando para padrão.", error);
       const safeUsers = [MOCK_ADMIN];
       localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(safeUsers));
@@ -66,7 +70,6 @@ export const authService = {
   },
 
   login: async (email: string, password: string): Promise<User> => {
-    // Simulate API delay
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     let userToLogin: User | undefined;
@@ -81,9 +84,7 @@ export const authService = {
        const found = users.find(u => u.email.toLowerCase() === normalizedEmail);
        
        if (found) {
-         // Lógica de Senha: '123456' ou CPF (apenas números)
          const cpfPassword = found.cpf ? found.cpf.replace(/\D/g, '') : null;
-         
          if (password === '123456' || (cpfPassword && password === cpfPassword)) {
            userToLogin = found;
          }
@@ -91,16 +92,14 @@ export const authService = {
     }
 
     if (userToLogin) {
-      // Garantia de Role: Se perdeu a role, restaura baseada no e-mail
+      // Garantia de Role: Força ADMIN para o email mestre
       if (userToLogin.email === MOCK_ADMIN.email) {
-         userToLogin.role = 'ADMIN'; // Força ADMIN para o email mestre
-      } else if (!userToLogin.role) {
-         userToLogin.role = 'SUBSCRIBER';
+         userToLogin.role = 'ADMIN'; 
       }
 
       const session: Session = {
         userId: userToLogin.id,
-        token: `token-${generateId()}`, // Uso seguro de generateId
+        token: `token-${generateId()}`,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       };
 
@@ -108,19 +107,18 @@ export const authService = {
         localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userToLogin));
         localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
         
-        // Garante que a lista global esteja sincronizada se o admin logar
+        // Sincroniza a lista global
         if (userToLogin.id === MOCK_ADMIN.id) {
-           authService.getAllUsers(); // Trigger refresh check
+           authService.getAllUsers(); 
         }
       } catch (error) {
-        console.error('Failed to save session', error);
         throw new Error('Erro ao salvar sessão local.');
       }
 
       return userToLogin;
     }
 
-    throw new Error('Credenciais inválidas. Se foi cadastrado via Eduzz, sua senha é o seu CPF (apenas números).');
+    throw new Error('Credenciais inválidas.');
   },
 
   logout: () => {
@@ -147,22 +145,32 @@ export const authService = {
 
       const user: User = JSON.parse(userStr);
       
-      // BLINDAGEM DE ADMIN: Se o email for admin@seniorfit.com, a role TEM que ser ADMIN.
-      // Isso corrige casos onde dados antigos corrompem o acesso.
+      // === AUTO-CORRECTION & SELF-HEALING ===
+      // Se detectarmos o email do admin mas a role estiver errada,
+      // corrigimos o objeto EM MEMÓRIA e no DISCO imediatamente.
       if (user.email === MOCK_ADMIN.email && user.role !== 'ADMIN') {
-         console.warn("Detectada inconsistência de permissão Admin. Corrigindo automaticamente.");
+         console.warn("SISTEMA DE SEGURANÇA: Restaurando privilégios de Admin.");
          user.role = 'ADMIN'; 
+         
+         // Atualiza Sessão Atual
          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+         
+         // Atualiza Base de Dados
+         const allUsers = authService.getAllUsers();
+         const idx = allUsers.findIndex(u => u.email === MOCK_ADMIN.email);
+         if (idx !== -1) {
+             allUsers[idx].role = 'ADMIN';
+             localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(allUsers));
+         }
       }
 
       return user;
     } catch (error) {
-      console.error('Error retrieving user from storage', error);
       return null;
     }
   },
 
-  // --- User Management ---
+  // --- CRUD User ---
 
   createUser: (user: Omit<User, 'id' | 'createdAt'>): User => {
     const users = authService.getAllUsers();
@@ -172,7 +180,7 @@ export const authService = {
 
     const newUser: User = {
       ...user,
-      id: generateId(), // ID Seguro
+      id: generateId(),
       createdAt: new Date().toISOString(),
     };
 
@@ -188,7 +196,6 @@ export const authService = {
       users[index] = user;
       localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
       
-      // Se o usuário atualizado for o mesmo logado, atualiza a sessão
       const currentUser = authService.getCurrentUser();
       if (currentUser && currentUser.id === user.id) {
          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
@@ -203,7 +210,7 @@ export const authService = {
     localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
   },
 
-  // --- System Settings ---
+  // --- Settings ---
 
   getSettings: (): SystemSettings => {
     try {
@@ -217,8 +224,6 @@ export const authService = {
   updateSettings: (settings: SystemSettings): void => {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   },
-
-  // --- Integration Settings ---
 
   getIntegrationSettings: (): IntegrationSettings => {
     try {
@@ -235,7 +240,7 @@ export const authService = {
     localStorage.setItem(STORAGE_KEYS.INTEGRATIONS, JSON.stringify(settings));
   },
 
-  // --- Webhook Simulation (Eduzz) ---
+  // --- Eduzz Simulation ---
 
   simulateEduzzWebhook: (payload: any) => {
     const status = payload.chk_status?.toString();
@@ -262,7 +267,7 @@ export const authService = {
       return { action: 'updated', user };
     } else {
       const newUser: User = {
-        id: generateId(), // ID Seguro
+        id: generateId(),
         name: payload.cus_name || email.split('@')[0],
         email: email,
         role: 'SUBSCRIBER',
@@ -278,8 +283,6 @@ export const authService = {
       return { action: 'created', user: newUser };
     }
   },
-
-  // --- Metrics ---
 
   getRecentSubscribersCount: (): number => {
     try {

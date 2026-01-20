@@ -3,7 +3,6 @@ import { Login } from './pages/Login';
 import { Patients } from './pages/Patients';
 import { PatientDetails } from './pages/PatientDetails';
 import { AdminPanel } from './pages/AdminPanel';
-// import { AdminHome } from './pages/AdminHome'; // REMOVIDO: Arquivo não existe
 import { Subscribers } from './pages/Subscribers';
 import { Integrations } from './pages/Integrations';
 import { TrainingDashboard } from './pages/TrainingDashboard';
@@ -37,6 +36,9 @@ function AppContent() {
 
   useEffect(() => {
     const initAuth = () => {
+      // FORÇA RE-LEITURA: getCurrentUser agora possui auto-correção interna para Admin.
+      // Ao chamar aqui, garantimos que qualquer dado corrompido no storage seja corrigido
+      // antes de definir o estado do React.
       const storedUser = authService.getCurrentUser();
       if (storedUser) {
         setUser(storedUser);
@@ -49,8 +51,12 @@ function AppContent() {
   useEffect(() => {
     if (user) {
       if (user.role === 'ADMIN') {
-        setCurrentView('admin-dashboard');
+        // Se for admin, mantemos no dashboard ou na view atual se já estiver navegando
+        if (currentView === 'patients') {
+            setCurrentView('admin-dashboard');
+        }
       } else {
+        // Se não for admin, força para pacientes
         setCurrentView('patients');
       }
     }
@@ -73,8 +79,9 @@ function AppContent() {
   };
 
   const handleNavigate = (view: any) => { // FIX: Type 'any' to resolve TS7006
-    // Basic Role Guard
+    // Guardião de Rotas Administrativas
     const adminViews = ['admin-settings', 'admin-dashboard', 'subscribers', 'integrations', 'eduzz', 'crm'];
+    
     if (adminViews.includes(view) && user?.role !== 'ADMIN') {
       alert('Acesso negado. Apenas administradores podem acessar esta área.');
       return;
@@ -134,11 +141,25 @@ function AppContent() {
       
       <main className="pt-16 lg:ml-64 min-h-[calc(100vh-64px)]">
         
-        {/* FALLBACK: Como AdminHome foi removido, usamos AdminPanel para o dashboard */}
+        {/* ROTAS ADMINISTRATIVAS */}
         {currentView === 'admin-dashboard' && user.role === 'ADMIN' && (
           <AdminPanel />
         )}
 
+        {currentView === 'admin-settings' && user.role === 'ADMIN' && (
+          <AdminPanel />
+        )}
+
+        {currentView === 'subscribers' && user.role === 'ADMIN' && (
+          <Subscribers />
+        )}
+
+        {/* Integrações agrupa Eduzz e CRM */}
+        {(currentView === 'integrations' || currentView === 'eduzz' || currentView === 'crm') && user.role === 'ADMIN' && (
+          <Integrations />
+        )}
+
+        {/* ROTAS COMUNS / CLÍNICAS */}
         {currentView === 'agenda' && (
           <Agenda />
         )}
@@ -157,18 +178,6 @@ function AppContent() {
 
         {currentView === 'training' && (
           <TrainingDashboard />
-        )}
-
-        {currentView === 'admin-settings' && user.role === 'ADMIN' && (
-          <AdminPanel />
-        )}
-
-        {currentView === 'subscribers' && user.role === 'ADMIN' && (
-          <Subscribers />
-        )}
-
-        {(currentView === 'integrations' || currentView === 'eduzz' || currentView === 'crm') && user.role === 'ADMIN' && (
-          <Integrations />
         )}
       </main>
 
@@ -197,7 +206,7 @@ function AppContent() {
                  </div>
                )}
                <div className="text-center text-xs text-gray-400 pt-4 border-t border-gray-100">
-                 Versão 1.19.0 (Agenda & PWA)
+                 Versão 1.28.2 (Master Secure)
                </div>
             </div>
          </Modal>

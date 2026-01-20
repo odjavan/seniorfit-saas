@@ -1,10 +1,10 @@
 import React from 'react';
-import { Users, Settings, BarChart3, Database, Dumbbell, Calendar, Home } from 'lucide-react';
+import { Users, Settings, BarChart3, Database, Dumbbell, Calendar, Home, Zap, DollarSign, Bell } from 'lucide-react';
 import { Role } from '../types';
 
 interface SidebarProps {
   currentView: string;
-  onNavigate: (view: 'patients' | 'admin-settings' | 'subscribers' | 'admin-dashboard' | 'training' | 'agenda') => void;
+  onNavigate: (view: 'patients' | 'admin-settings' | 'subscribers' | 'admin-dashboard' | 'training' | 'agenda' | 'integrations' | 'eduzz' | 'crm') => void;
   userRole?: Role;
 }
 
@@ -19,6 +19,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       { id: 'patients', label: 'Pacientes (Clínica)', icon: Database }, 
       { id: 'agenda', label: 'Agenda Master', icon: Calendar },
       { id: 'training', label: 'Treinamento', icon: Dumbbell },
+      { id: 'integrations', label: 'Integrações & API', icon: Zap },
+      { id: 'eduzz', label: 'Eduzz Financeiro', icon: DollarSign },
+      { id: 'crm', label: 'CRM & Notificações', icon: Bell },
       { id: 'admin-settings', label: 'Configurações', icon: Settings },
     ];
   } else {
@@ -31,7 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
   }
 
   return (
-    <aside className="fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-gray-200 hidden lg:block overflow-y-auto z-40">
+    <aside className="fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-gray-200 hidden lg:block overflow-y-auto z-40 no-scrollbar">
       <div className="p-4">
         {userRole === 'ADMIN' && (
            <div className="mb-4 px-4 py-2 bg-blue-50 text-blue-700 rounded-md text-xs font-bold uppercase tracking-wider text-center">
@@ -62,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       {/* Rodapé da Sidebar */}
       <div className="absolute bottom-0 w-full p-4 border-t border-gray-100 bg-gray-50">
         <div className="text-xs text-center text-gray-400">
-          SeniorFit v1.28.1
+          SeniorFit v1.28.2 (Secure)
         </div>
       </div>
     </aside>

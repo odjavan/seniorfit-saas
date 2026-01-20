@@ -1,299 +1,220 @@
-import { User, Session, Role, SystemSettings, IntegrationSettings } from '../types';
-import { generateId } from '../utils/generateId';
-
-const STORAGE_KEYS = {
-  USER: 'seniorfit_user',
-  SESSION: 'seniorfit_session',
-  ALL_USERS: 'sf_users',
-  SETTINGS: 'sf_settings',
-  INTEGRATIONS: 'sf_integrations',
-};
-
-// Mock admin for initialization - A CONSTANTE MESTRA
-const MOCK_ADMIN: User = {
-  id: 'admin-001',
-  email: 'admin@seniorfit.com',
-  name: 'Administrador Master',
-  role: 'ADMIN', // Esta regra é imutável
-  createdAt: new Date().toISOString(),
-  subscriptionStatus: 'active'
-};
+import { supabase } from '../lib/supabase';
+import { User, Role, SystemSettings, IntegrationSettings } from '../types';
 
 const DEFAULT_SETTINGS: SystemSettings = {
   howToInstallVideoUrl: '',
 };
 
 const DEFAULT_INTEGRATIONS: IntegrationSettings = {
-  emailjs: {
-    serviceId: '',
-    templateIdRecovery: '',
-    templateIdWelcome: '',
-    publicKey: '',
-  },
-  eduzz: {
-    webhookUrl: 'https://api.seniorfit-app.com/webhooks/eduzz',
-    liveKey: '',
-    appUrl: '',
-  },
-  gemini: {
-    apiKey: '',
-  }
+  emailjs: { serviceId: '', templateIdRecovery: '', templateIdWelcome: '', publicKey: '' },
+  eduzz: { webhookUrl: '', liveKey: '', appUrl: '' },
+  gemini: { apiKey: '' }
 };
 
 export const authService = {
-  // --- Initialization & User Retrieval ---
-  getAllUsers: (): User[] => {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.ALL_USERS);
-      let users: User[] = data ? JSON.parse(data) : [];
-      
-      // Verificação de Integridade: Admin deve sempre existir
-      const adminIndex = users.findIndex(u => u.email === MOCK_ADMIN.email);
-      
-      if (adminIndex === -1) {
-        console.log("Inicializando sistema: Criando Admin padrão.");
-        users.unshift(MOCK_ADMIN);
-        localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
-      } else if (users[adminIndex].role !== 'ADMIN') {
-        // Correção de integridade da base de dados
-        console.warn("Corrigindo role do Admin na base de dados.");
-        users[adminIndex].role = 'ADMIN';
-        localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
-      }
-      return users;
-    } catch (error) {
-      console.error("Erro no armazenamento de usuários. Resetando para padrão.", error);
-      const safeUsers = [MOCK_ADMIN];
-      localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(safeUsers));
-      return safeUsers;
-    }
-  },
+  // --- Auth Core ---
 
   login: async (email: string, password: string): Promise<User> => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // 1. Autenticação no Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-    let userToLogin: User | undefined;
-    const normalizedEmail = email.toLowerCase().trim();
+    if (authError) throw new Error(authError.message);
+    if (!authData.user) throw new Error('Usuário não encontrado.');
 
-    // 1. Verificação de Admin Hardcoded (Backup de Acesso)
-    if (normalizedEmail === MOCK_ADMIN.email && password === 'admin') {
-      userToLogin = MOCK_ADMIN;
-    } else {
-       // 2. Verificação na Base de Dados Local
-       const users = authService.getAllUsers();
-       const found = users.find(u => u.email.toLowerCase() === normalizedEmail);
-       
-       if (found) {
-         const cpfPassword = found.cpf ? found.cpf.replace(/\D/g, '') : null;
-         if (password === '123456' || (cpfPassword && password === cpfPassword)) {
-           userToLogin = found;
-         }
-       }
-    }
+    // 2. Buscar perfil detalhado na tabela 'profiles'
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authData.user.id)
+      .single();
 
-    if (userToLogin) {
-      // Garantia de Role: Força ADMIN para o email mestre
-      if (userToLogin.email === MOCK_ADMIN.email) {
-         userToLogin.role = 'ADMIN'; 
-      }
-
-      const session: Session = {
-        userId: userToLogin.id,
-        token: `token-${generateId()}`,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    if (profileError) {
+      // Fallback: Se o usuário existe no Auth mas não no Profile
+      return {
+        id: authData.user.id,
+        email: authData.user.email!,
+        name: 'Usuário',
+        role: 'TRAINER',
+        createdAt: new Date().toISOString(),
+        subscriptionStatus: 'active'
       };
-
-      try {
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userToLogin));
-        localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
-        
-        // Sincroniza a lista global
-        if (userToLogin.id === MOCK_ADMIN.id) {
-           authService.getAllUsers(); 
-        }
-      } catch (error) {
-        throw new Error('Erro ao salvar sessão local.');
-      }
-
-      return userToLogin;
     }
 
-    throw new Error('Credenciais inválidas.');
+    return {
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      role: profile.role as Role,
+      createdAt: profile.created_at,
+      subscriptionStatus: profile.subscription_status,
+      cpf: profile.cpf,
+      eduzzId: profile.eduzz_id
+    };
   },
 
-  logout: () => {
-    try {
-      localStorage.removeItem(STORAGE_KEYS.USER);
-      localStorage.removeItem(STORAGE_KEYS.SESSION);
-    } catch (error) {
-      console.error('Failed to clear session', error);
-    }
+  logout: async () => {
+    await supabase.auth.signOut();
+    localStorage.clear(); 
   },
 
-  getCurrentUser: (): User | null => {
-    try {
-      const userStr = localStorage.getItem(STORAGE_KEYS.USER);
-      const sessionStr = localStorage.getItem(STORAGE_KEYS.SESSION);
+  getCurrentUser: async (): Promise<User | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
 
-      if (!userStr || !sessionStr) return null;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
 
-      const session: Session = JSON.parse(sessionStr);
-      if (new Date(session.expiresAt) < new Date()) {
-        authService.logout();
-        return null;
-      }
+    if (!profile) return null;
 
-      const user: User = JSON.parse(userStr);
-      
-      // === AUTO-CORRECTION & SELF-HEALING ===
-      // Se detectarmos o email do admin mas a role estiver errada,
-      // corrigimos o objeto EM MEMÓRIA e no DISCO imediatamente.
-      if (user.email === MOCK_ADMIN.email && user.role !== 'ADMIN') {
-         console.warn("SISTEMA DE SEGURANÇA: Restaurando privilégios de Admin.");
-         user.role = 'ADMIN'; 
-         
-         // Atualiza Sessão Atual
-         localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-         
-         // Atualiza Base de Dados
-         const allUsers = authService.getAllUsers();
-         const idx = allUsers.findIndex(u => u.email === MOCK_ADMIN.email);
-         if (idx !== -1) {
-             allUsers[idx].role = 'ADMIN';
-             localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(allUsers));
-         }
-      }
+    return {
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      role: profile.role as Role,
+      createdAt: profile.created_at,
+      subscriptionStatus: profile.subscription_status,
+      cpf: profile.cpf,
+      eduzzId: profile.eduzz_id
+    };
+  },
 
-      return user;
-    } catch (error) {
-      return null;
+  getAllUsers: async (): Promise<User[]> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Erro ao buscar usuários:', error);
+      return [];
     }
+
+    return data.map(p => ({
+      id: p.id,
+      email: p.email,
+      name: p.name,
+      role: p.role as Role,
+      createdAt: p.created_at,
+      subscriptionStatus: p.subscription_status,
+      cpf: p.cpf,
+      eduzzId: p.eduzz_id
+    }));
   },
 
   // --- CRUD User ---
 
-  createUser: (user: Omit<User, 'id' | 'createdAt'>): User => {
-    const users = authService.getAllUsers();
-    if (users.some(u => u.email.toLowerCase() === user.email.toLowerCase())) {
-      throw new Error('E-mail já cadastrado.');
-    }
+  createUser: async (user: Omit<User, 'id' | 'createdAt'>): Promise<void> => {
+    // Inserção direta no perfil (Geralmente requer trigger ou criação via Auth Admin API)
+    // Para este escopo, assumimos inserção direta na tabela profiles
+    const { error } = await supabase.from('profiles').insert([{
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      cpf: user.cpf,
+      eduzz_id: user.eduzzId,
+      subscription_status: user.subscriptionStatus
+    }]);
 
-    const newUser: User = {
-      ...user,
-      id: generateId(),
-      createdAt: new Date().toISOString(),
-    };
-
-    users.push(newUser);
-    localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
-    return newUser;
+    if (error) throw new Error(error.message);
   },
 
-  updateUser: (user: User): void => {
-    const users = authService.getAllUsers();
-    const index = users.findIndex(u => u.id === user.id);
-    if (index !== -1) {
-      users[index] = user;
-      localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
-      
-      const currentUser = authService.getCurrentUser();
-      if (currentUser && currentUser.id === user.id) {
-         localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
-      }
-    }
+  updateUser: async (user: User): Promise<void> => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        name: user.name,
+        role: user.role,
+        cpf: user.cpf,
+        eduzz_id: user.eduzzId,
+        subscription_status: user.subscriptionStatus
+      })
+      .eq('id', user.id);
+
+    if (error) throw new Error(error.message);
   },
 
-  deleteUser: (userId: string): void => {
-    if (userId === MOCK_ADMIN.id) throw new Error('Não é possível excluir o administrador principal.');
-    let users = authService.getAllUsers();
-    users = users.filter(u => u.id !== userId);
-    localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
+  deleteUser: async (userId: string): Promise<void> => {
+    const { error } = await supabase.from('profiles').delete().eq('id', userId);
+    if (error) throw new Error(error.message);
   },
 
-  // --- Settings ---
+  // --- Configurações & Integrações ---
 
-  getSettings: (): SystemSettings => {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      return data ? JSON.parse(data) : DEFAULT_SETTINGS;
-    } catch (error) {
-      return DEFAULT_SETTINGS;
-    }
+  getSettings: async (): Promise<SystemSettings> => {
+    // Mantém configurações visuais locais para performance
+    const stored = localStorage.getItem('sf_settings');
+    return stored ? JSON.parse(stored) : DEFAULT_SETTINGS;
   },
 
   updateSettings: (settings: SystemSettings): void => {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    localStorage.setItem('sf_settings', JSON.stringify(settings));
   },
 
-  getIntegrationSettings: (): IntegrationSettings => {
-    try {
-      const data = localStorage.getItem(STORAGE_KEYS.INTEGRATIONS);
-      const settings = data ? JSON.parse(data) : DEFAULT_INTEGRATIONS;
-      if (!settings.gemini) settings.gemini = DEFAULT_INTEGRATIONS.gemini;
-      return settings;
-    } catch (error) {
+  getIntegrationSettings: async (): Promise<IntegrationSettings> => {
+    const { data, error } = await supabase
+      .from('integration_settings')
+      .select('settings')
+      .limit(1)
+      .single();
+
+    if (error || !data) {
       return DEFAULT_INTEGRATIONS;
     }
+
+    const settings = data.settings as IntegrationSettings;
+    // Cache para uso síncrono onde necessário
+    localStorage.setItem('sf_integrations', JSON.stringify(settings));
+    return settings;
   },
 
-  updateIntegrationSettings: (settings: IntegrationSettings): void => {
-    localStorage.setItem(STORAGE_KEYS.INTEGRATIONS, JSON.stringify(settings));
-  },
+  updateIntegrationSettings: async (settings: IntegrationSettings): Promise<void> => {
+    const { data } = await supabase.from('integration_settings').select('id').limit(1).single();
 
-  // --- Eduzz Simulation ---
-
-  simulateEduzzWebhook: (payload: any) => {
-    const status = payload.chk_status?.toString();
-    if (status !== '3' && status !== 'paid') {
-      throw new Error(`Webhook ignorado: Status '${status}' não é pago.`);
-    }
-
-    const email = payload.cus_email;
-    if (!email) throw new Error('Dados inválidos: E-mail não encontrado.');
-
-    const users = authService.getAllUsers();
-    const existingUserIndex = users.findIndex(u => u.email === email);
-
-    if (existingUserIndex !== -1) {
-      const user = users[existingUserIndex];
-      user.role = 'SUBSCRIBER';
-      user.subscriptionStatus = 'active';
-      user.lastPaymentDate = new Date().toISOString();
-      if (payload.cus_taxnumber) user.cpf = payload.cus_taxnumber;
-      if (payload.trans_cod) user.eduzzId = payload.trans_cod;
-      
-      users[existingUserIndex] = user;
-      localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
-      return { action: 'updated', user };
+    if (data) {
+      await supabase
+        .from('integration_settings')
+        .update({ settings, updated_at: new Date().toISOString() })
+        .eq('id', data.id);
     } else {
-      const newUser: User = {
-        id: generateId(),
-        name: payload.cus_name || email.split('@')[0],
-        email: email,
-        role: 'SUBSCRIBER',
-        createdAt: new Date().toISOString(),
-        subscriptionStatus: 'active',
-        cpf: payload.cus_taxnumber,
-        lastPaymentDate: new Date().toISOString(),
-        eduzzId: payload.trans_cod
-      };
-      
-      users.push(newUser);
-      localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
-      return { action: 'created', user: newUser };
+      await supabase.from('integration_settings').insert([{ settings }]);
     }
+    
+    localStorage.setItem('sf_integrations', JSON.stringify(settings));
   },
 
-  getRecentSubscribersCount: (): number => {
-    try {
-      const users = authService.getAllUsers();
-      const oneDayAgo = new Date().getTime() - (24 * 60 * 60 * 1000);
-      return users.filter(u => 
-        u.role === 'SUBSCRIBER' && 
-        new Date(u.createdAt).getTime() > oneDayAgo
-      ).length;
-    } catch (e) {
-      return 0;
-    }
+  // --- Métricas ---
+
+  getRecentSubscribersCount: async (): Promise<number> => {
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+
+    const { count } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'SUBSCRIBER')
+      .gt('created_at', oneDayAgo.toISOString());
+
+    return count || 0;
+  },
+
+  simulateEduzzWebhook: (payload: any): { action: string, user: User } => {
+    console.log("Simulating Webhook", payload);
+    return { 
+      action: 'created', 
+      user: { 
+        id: 'mock-id', 
+        name: payload.cus_name, 
+        email: payload.cus_email, 
+        role: 'SUBSCRIBER', 
+        createdAt: new Date().toISOString(),
+        subscriptionStatus: 'active'
+      } 
+    };
   }
 };

@@ -34,16 +34,11 @@ export const Agenda: React.FC = () => {
       const safeAppts = Array.isArray(rawAppts) ? rawAppts : [];
       
       // 2. Protocolo de Saneamento (Data Cleaning)
-      // Remove agendamentos com datas inválidas ou formatos legados que quebram o React
       const validAppts = safeAppts.filter(appt => {
         if (!appt.dateTime) return false;
         const timestamp = new Date(appt.dateTime).getTime();
-        return !isNaN(timestamp); // Mantém apenas se for uma data válida
+        return !isNaN(timestamp);
       });
-
-      if (validAppts.length < safeAppts.length) {
-        console.warn(`Agenda: ${safeAppts.length - validAppts.length} registros corrompidos foram removidos para evitar crash.`);
-      }
 
       setAppointments(validAppts);
       
@@ -51,7 +46,7 @@ export const Agenda: React.FC = () => {
       setPatients(Array.isArray(pts) ? pts : []);
     } catch (e) {
       console.error("ERRO CRÍTICO NA AGENDA. Resetando visualização.", e);
-      setAppointments([]); // Fail-safe: Tela vazia é melhor que tela branca
+      setAppointments([]);
     }
   };
 
@@ -62,11 +57,12 @@ export const Agenda: React.FC = () => {
     if (!patient) return;
 
     try {
+      // ID é gerado internamente no serviço usando generateId()
       agendaService.create({
         patientId: patient.id,
         patientName: patient.name,
         patientPhone: patient.whatsapp,
-        dateTime: `${formData.date}T${formData.time}`, // ISO Format Forced
+        dateTime: `${formData.date}T${formData.time}`, // Formato ISO Obrigatório
         type: formData.type,
         status: 'Agendado',
         notes: formData.notes
@@ -118,7 +114,7 @@ export const Agenda: React.FC = () => {
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(appt);
     } catch (e) {
-      // Ignora silenciosamente registros mal formados durante o reduce
+      // Ignora registros inválidos
     }
     return groups;
   }, {} as Record<string, Appointment[]>);

@@ -1,11 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Recupera a chave API EXCLUSIVAMENTE do armazenamento local do usuário
+// NENHUMA dependência de import.meta.env
 const getApiKey = (): string => {
   try {
     const stored = localStorage.getItem('sf_integrations');
     if (stored) {
       const settings = JSON.parse(stored);
+      // Retorna a chave do objeto salvo ou string vazia
       return settings.gemini?.apiKey?.trim() || '';
     }
   } catch (e) {
@@ -17,8 +19,9 @@ const getApiKey = (): string => {
 export const sendMessageToCoach = async (message: string): Promise<string> => {
   const apiKey = getApiKey();
 
-  if (!apiKey || apiKey.length < 20) {
-     return "⚠️ Chave API não encontrada ou inválida. Por favor, vá em 'Integrações' e adicione sua Google Gemini API Key.";
+  // Validação estrita
+  if (!apiKey || apiKey.length < 5) {
+     return "Chave não configurada";
   }
 
   try {

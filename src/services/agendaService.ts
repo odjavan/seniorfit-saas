@@ -1,66 +1,98 @@
+import { supabase } from '../lib/supabase';
 import { Appointment } from '../types';
 
-const STORAGE_KEY = 'sf_appointments';
-
 export const agendaService = {
-  getAll: (): Appointment[] => {
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
-    } catch (error) {
-      console.error('Error fetching appointments', error);
+  getAll: async (): Promise<Appointment[]> => {
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*')
+      .order('date_time', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching agenda:', error);
       return [];
     }
+
+    return data.map(a => ({
+      id: a.id,
+      patientId: a.patient_id,
+      patientName: a.patient_name,
+      patientPhone: a.patient_phone,
+      dateTime: a.date_time,
+      type: a.type,
+      status: a.status,
+      notes: a.notes
+    }));
   },
 
-  create: (appointment: Omit<Appointment, 'id'>): Appointment => {
-    const appointments = agendaService.getAll();
-    
-    // Conflict Detection (Simple 1-hour block logic)
-    // Checks if there is any appointment within +/- 59 minutes of the new time
-    const newTime = new Date(appointment.dateTime).getTime();
-    const hasConflict = appointments.some(appt => {
-      if (appt.status === 'Concluído' || appt.status === 'Faltou') return false; // Ignore past/cancelled
-      const existingTime = new Date(appt.dateTime).getTime();
-      const diffMinutes = Math.abs(existingTime - newTime) / (1000 * 60);
-      return diffMinutes < 60; // 60 minutes slot
-    });
+  create: async (appointment: Omit<Appointment, 'id'>): Promise<Appointment> => {
+    // Verificação de conflito de horário básica
+    const { data: existing } = await supabase
+      .from('appointments')
+      .select('date_time')
+      .neq('status', 'Concluído')
+      .neq('status', 'Faltou');
 
-    if (hasConflict) {
-      throw new Error('Choque de horários! Já existe um agendamento neste período (intervalo de 1h).');
+    const newTime = new Date(appointment.dateTime).getTime();
+    
+    if (existing) {
+      const hasConflict = existing.some(appt => {
+        const existingTime = new Date(appt.date_time).getTime();
+        const diffMinutes = Math.abs(existingTime - newTime) / (1000 * 60);
+        return diffMinutes < 60;
+      });
+
+      if (hasConflict) {
+        throw new Error('Choque de horários! Intervalo mínimo de 1h necessário.');
+      }
     }
 
-    const newAppointment: Appointment = {
-      ...appointment,
-      id: crypto.randomUUID()
+    const dbPayload = {
+      patient_id: appointment.patientId,
+      patient_name: appointment.patientName,
+      patient_phone: appointment.patientPhone,
+      date_time: appointment.dateTime,
+      type: appointment.type,
+      status: appointment.status,
+      notes: appointment.notes
     };
 
-    appointments.push(newAppointment);
-    
-    // Sort by date
-    appointments.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+    // O banco gera o ID automaticamente
+    const { data, error } = await supabase
+      .from('appointments')
+      .insert([dbPayload])
+      .select()
+      .single();
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(appointments));
-    return newAppointment;
+    if (error) throw new Error(error.message);
+
+    return {
+      id: data.id,
+      patientId: data.patient_id,
+      patientName: data.patient_name,
+      patientPhone: data.patient_phone,
+      dateTime: data.date_time,
+      type: data.type,
+      status: data.status,
+      notes: data.notes
+    };
   },
 
-  updateStatus: (id: string, status: Appointment['status']): void => {
-    const appointments = agendaService.getAll();
-    const index = appointments.findIndex(a => a.id === id);
-    if (index !== -1) {
-      appointments[index].status = status;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(appointments));
-    }
+  updateStatus: async (id: string, status: Appointment['status']): Promise<void> => {
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) throw new Error(error.message);
   },
 
-  delete: (id: string): void => {
-    let appointments = agendaService.getAll();
-    appointments = appointments.filter(a => a.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(appointments));
-  },
+  delete: async (id: string): Promise<void> => {
+    const { error } = await supabase
+      .from('appointments')
+      .delete()
+      .eq('id', id);
 
-  getUpcoming: (): Appointment[] => {
-    const now = new Date();
-    return agendaService.getAll().filter(a => new Date(a.dateTime) >= now && a.status === 'Agendado');
+    if (error) throw new Error(error.message);
   }
 };

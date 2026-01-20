@@ -1,70 +1,173 @@
+import { supabase } from '../lib/supabase';
 import { Patient } from '../types';
-import { generateId } from '../utils/generateId';
-
-const STORAGE_KEY = 'sf_clients';
 
 export const patientService = {
-  getAll: (): Patient[] => {
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      return data ? JSON.parse(data) : [];
-    } catch (error) {
-      console.error('Error fetching patients', error);
+  getAll: async (): Promise<Patient[]> => {
+    const { data, error } = await supabase
+      .from('patients')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching patients:', error);
       return [];
     }
-  },
 
-  getById: (id: string): Patient | undefined => {
-    const patients = patientService.getAll();
-    return patients.find(p => p.id === id);
-  },
+    // Mapeamento Snake Case (DB) -> Camel Case (App)
+    return data.map(p => {
+      let age = 0;
+      if (p.birth_date) {
+        const today = new Date();
+        const birthDate = new Date(p.birth_date);
+        age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+      }
 
-  create: (patientData: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Patient => {
-    const patients = patientService.getAll();
-    
-    const newPatient: Patient = {
-      ...patientData,
-      id: generateId(), // Utilizando generateId() para segurança em HTTP
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    patients.unshift(newPatient); // Add to beginning of list
-
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(patients));
-    } catch (error) {
-      console.error('Error saving patient', error);
-      throw new Error('Falha ao salvar paciente no armazenamento local.');
-    }
-
-    return newPatient;
-  },
-
-  update: (patient: Patient): void => {
-    const patients = patientService.getAll();
-    const index = patients.findIndex(p => p.id === patient.id);
-    
-    if (index !== -1) {
-      patients[index] = {
-        ...patient,
-        updatedAt: new Date().toISOString()
+      return {
+        id: p.id,
+        name: p.name,
+        birthDate: p.birth_date,
+        age: age,
+        weight: p.weight,
+        height: p.height,
+        bmi: p.bmi,
+        sex: p.sex,
+        whatsapp: p.whatsapp,
+        ethnicity: p.ethnicity,
+        screening: p.screening || undefined,
+        tests: p.tests || [],
+        history: p.history || [],
+        createdAt: p.created_at,
+        updatedAt: p.updated_at
       };
-      
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(patients));
-      } catch (error) {
-        console.error('Error updating patient', error);
-        throw new Error('Falha ao atualizar dados do paciente.');
+    });
+  },
+
+  getById: async (id: string): Promise<Patient | null> => {
+    const { data: p, error } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !p) return null;
+
+    let age = 0;
+    if (p.birth_date) {
+      const today = new Date();
+      const birthDate = new Date(p.birth_date);
+      age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
       }
     }
+
+    return {
+      id: p.id,
+      name: p.name,
+      birthDate: p.birth_date,
+      age: age,
+      weight: p.weight,
+      height: p.height,
+      bmi: p.bmi,
+      sex: p.sex,
+      whatsapp: p.whatsapp,
+      ethnicity: p.ethnicity,
+      screening: p.screening || undefined,
+      tests: p.tests || [],
+      history: p.history || [],
+      createdAt: p.created_at,
+      updatedAt: p.updated_at
+    };
   },
 
-  search: (query: string): Patient[] => {
-    const patients = patientService.getAll();
-    if (!query) return patients;
-    
-    const lowerQuery = query.toLowerCase();
-    return patients.filter(p => p.name.toLowerCase().includes(lowerQuery));
+  create: async (patientData: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient> => {
+    // Mapeamento para o formato do banco (snake_case)
+    const dbPayload = {
+      name: patientData.name,
+      birth_date: patientData.birthDate,
+      sex: patientData.sex,
+      whatsapp: patientData.whatsapp,
+      weight: patientData.weight,
+      height: patientData.height,
+      bmi: patientData.bmi,
+      ethnicity: patientData.ethnicity,
+      screening: patientData.screening || {},
+      tests: patientData.tests || [],
+      history: patientData.history || []
+    };
+
+    // Inserção sem ID (gerado pelo Postgres)
+    const { data, error } = await supabase
+      .from('patients')
+      .insert([dbPayload])
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    return {
+      ...patientData,
+      id: data.id,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at
+    };
+  },
+
+  update: async (patient: Patient): Promise<void> => {
+    const dbPayload = {
+      name: patient.name,
+      birth_date: patient.birthDate,
+      sex: patient.sex,
+      whatsapp: patient.whatsapp,
+      weight: patient.weight,
+      height: patient.height,
+      bmi: patient.bmi,
+      ethnicity: patient.ethnicity,
+      screening: patient.screening,
+      tests: patient.tests,
+      history: patient.history,
+      updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+      .from('patients')
+      .update(dbPayload)
+      .eq('id', patient.id);
+
+    if (error) throw new Error('Falha ao atualizar dados do aluno: ' + error.message);
+  },
+
+  search: async (query: string): Promise<Patient[]> => {
+    if (!query) return patientService.getAll();
+
+    const { data, error } = await supabase
+      .from('patients')
+      .select('*')
+      .ilike('name', `%${query}%`);
+
+    if (error) return [];
+
+    return data.map(p => ({
+      id: p.id,
+      name: p.name,
+      birthDate: p.birth_date,
+      age: 0, 
+      weight: p.weight,
+      height: p.height,
+      bmi: p.bmi,
+      sex: p.sex,
+      whatsapp: p.whatsapp,
+      ethnicity: p.ethnicity,
+      screening: p.screening,
+      tests: p.tests,
+      history: p.history,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at
+    }));
   }
 };

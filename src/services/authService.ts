@@ -92,8 +92,10 @@ export const authService = {
 
     if (userToLogin) {
       // Garantia de Role: Se perdeu a role, restaura baseada no e-mail
-      if (!userToLogin.role) {
-         userToLogin.role = userToLogin.email === MOCK_ADMIN.email ? 'ADMIN' : 'SUBSCRIBER';
+      if (userToLogin.email === MOCK_ADMIN.email) {
+         userToLogin.role = 'ADMIN'; // Força ADMIN para o email mestre
+      } else if (!userToLogin.role) {
+         userToLogin.role = 'SUBSCRIBER';
       }
 
       const session: Session = {
@@ -108,7 +110,7 @@ export const authService = {
         
         // Garante que a lista global esteja sincronizada se o admin logar
         if (userToLogin.id === MOCK_ADMIN.id) {
-           authService.getAllUsers(); 
+           authService.getAllUsers(); // Trigger refresh check
         }
       } catch (error) {
         console.error('Failed to save session', error);
@@ -145,9 +147,11 @@ export const authService = {
 
       const user: User = JSON.parse(userStr);
       
-      // Validação Extra de Role no retorno
+      // BLINDAGEM DE ADMIN: Se o email for admin@seniorfit.com, a role TEM que ser ADMIN.
+      // Isso corrige casos onde dados antigos corrompem o acesso.
       if (user.email === MOCK_ADMIN.email && user.role !== 'ADMIN') {
-         user.role = 'ADMIN'; // Correção em tempo de execução
+         console.warn("Detectada inconsistência de permissão Admin. Corrigindo automaticamente.");
+         user.role = 'ADMIN'; 
          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       }
 

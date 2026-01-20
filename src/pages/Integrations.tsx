@@ -318,7 +318,7 @@ export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integr
                  </div>
               </div>
 
-              {/* Restored CRM Guidelines */}
+              {/* RESTORED CRM GUIDELINES */}
               <div className="bg-purple-50 p-6 rounded-xl border border-purple-100 mb-6">
                 <h3 className="text-lg font-bold text-purple-900 mb-3 flex items-center">
                   <Bell className="mr-2" size={20} /> Diretrizes de Notificação Push

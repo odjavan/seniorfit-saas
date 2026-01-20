@@ -206,7 +206,7 @@ function AppContent() {
                  </div>
                )}
                <div className="text-center text-xs text-gray-400 pt-4 border-t border-gray-100">
-                 Versão 1.28.5 (Master Final)
+                 Versão 1.28.6 (Stable)
                </div>
             </div>
          </Modal>

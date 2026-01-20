@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Settings, BarChart3, Database, Dumbbell, Calendar, Home, Zap, DollarSign, Bell } from 'lucide-react';
+import { Users, Settings, BarChart3, Database, Calendar, Zap, DollarSign, Bell } from 'lucide-react';
 import { Role } from '../types';
 
 interface SidebarProps {
@@ -18,7 +18,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       { id: 'subscribers', label: 'Gestão Assinantes', icon: Users },
       { id: 'patients', label: 'Meus Alunos', icon: Database }, 
       { id: 'agenda', label: 'Agenda Master', icon: Calendar },
-      // Treinamento Removido conforme solicitação
+      // Treinamento removido
       { id: 'integrations', label: 'Integrações & IA', icon: Zap },
       { id: 'eduzz', label: 'Eduzz Financeiro', icon: DollarSign },
       { id: 'crm', label: 'CRM & Notificações', icon: Bell },
@@ -29,7 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
     menuItems = [
       { id: 'patients', label: 'Meus Alunos', icon: Users },
       { id: 'agenda', label: 'Agenda', icon: Calendar },
-      // Treinamento Removido conforme solicitação
+      // Treinamento removido
     ];
   }
 
@@ -68,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       {/* Rodapé da Sidebar */}
       <div className="absolute bottom-0 w-full p-4 border-t border-gray-100 bg-gray-50">
         <div className="text-xs text-center text-gray-400">
-          SeniorFit v1.28.4
+          SeniorFit v1.28.5
         </div>
       </div>
     </aside>

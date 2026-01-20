@@ -15,6 +15,7 @@ import { User, Patient } from './types';
 import { Modal } from './components/Modal';
 import { InstallGuide } from './components/InstallGuide';
 import { ToastProvider } from './contexts/ToastContext';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 // Definição dos tipos de views permitidas
 type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'training' | 'agenda';
@@ -31,11 +32,11 @@ function AppContent() {
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [helpVideoUrl, setHelpVideoUrl] = useState('');
 
+  // Initial Data Fetch
   useEffect(() => {
     const fetchPatient = async () => {
       if (selectedPatientId) {
         try {
-          // Await explícito aqui
           const p = await patientService.getById(selectedPatientId);
           setSelectedPatient(p);
         } catch (error) {
@@ -47,12 +48,24 @@ function AppContent() {
       }
     };
     fetchPatient();
+
+    // REALTIME: Inscrever para atualizações deste paciente específico
+    let subscription: RealtimeChannel | null = null;
+    if (selectedPatientId) {
+      subscription = patientService.subscribeById(selectedPatientId, (updatedPatient) => {
+        console.log("Realtime Update Received for Patient:", updatedPatient.name);
+        setSelectedPatient(updatedPatient);
+      });
+    }
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
   }, [selectedPatientId]);
 
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Await explícito para a sessão do Supabase
         const storedUser = await authService.getCurrentUser();
         if (storedUser) {
           setUser(storedUser);
@@ -94,7 +107,6 @@ function AppContent() {
   
   const toggleHelp = async () => {
     try {
-      // Await para buscar configurações do banco
       const settings = await authService.getSettings();
       setHelpVideoUrl(settings.howToInstallVideoUrl);
       setShowInstallHelp(!showInstallHelp);

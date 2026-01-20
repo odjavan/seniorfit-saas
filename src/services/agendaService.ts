@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Appointment } from '../types';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
 export const agendaService = {
   getAll: async (): Promise<Appointment[]> => {
@@ -26,7 +27,7 @@ export const agendaService = {
   },
 
   create: async (appointment: Omit<Appointment, 'id'>): Promise<Appointment> => {
-    // Verificação de conflito de horário básica
+    // Verificação de conflito básica
     const { data: existing } = await supabase
       .from('appointments')
       .select('date_time')
@@ -57,7 +58,6 @@ export const agendaService = {
       notes: appointment.notes
     };
 
-    // O banco gera o ID automaticamente
     const { data, error } = await supabase
       .from('appointments')
       .insert([dbPayload])
@@ -94,5 +94,17 @@ export const agendaService = {
       .eq('id', id);
 
     if (error) throw new Error(error.message);
+  },
+
+  // --- Realtime ---
+  subscribe: (onUpdate: () => void): RealtimeChannel => {
+    return supabase
+      .channel('agenda-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        () => onUpdate()
+      )
+      .subscribe();
   }
 };

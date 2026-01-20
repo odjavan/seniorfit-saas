@@ -19,7 +19,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       { id: 'patients', label: 'Pacientes (Clínica)', icon: Database }, 
       { id: 'agenda', label: 'Agenda Master', icon: Calendar },
       { id: 'training', label: 'Treinamento', icon: Dumbbell },
-      { id: 'integrations', label: 'Integrações & API', icon: Zap },
+      { id: 'integrations', label: 'Integrações & IA', icon: Zap },
       { id: 'eduzz', label: 'Eduzz Financeiro', icon: DollarSign },
       { id: 'crm', label: 'CRM & Notificações', icon: Bell },
       { id: 'admin-settings', label: 'Configurações', icon: Settings },
@@ -43,7 +43,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
         )}
         <nav className="space-y-1">
           {menuItems.map((item) => {
+            // Lógica visual: Se estiver em eduzz ou crm, destaca o respectivo botão,
+            // mas se estiver na integração genérica, destaca Integrações.
             const isActive = currentView === item.id;
+            
             return (
               <button
                 key={item.id}
@@ -65,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       {/* Rodapé da Sidebar */}
       <div className="absolute bottom-0 w-full p-4 border-t border-gray-100 bg-gray-50">
         <div className="text-xs text-center text-gray-400">
-          SeniorFit v1.28.2 (Secure)
+          SeniorFit v1.28.3 (Secure)
         </div>
       </div>
     </aside>

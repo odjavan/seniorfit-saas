@@ -3,15 +3,20 @@ import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { authService } from '../services/authService';
 import { IntegrationSettings } from '../types';
-import { Save, Copy, Check, Mail, DollarSign, Settings, Zap, PlayCircle, AlertTriangle, Bot } from 'lucide-react';
+import { Save, Copy, Check, Mail, DollarSign, Settings, Zap, PlayCircle, AlertTriangle, Bot, TrendingUp, Key, Bell, CreditCard, BarChart } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 
-export const Integrations: React.FC = () => {
+interface IntegrationsProps {
+  activeView?: 'integrations' | 'eduzz' | 'crm';
+}
+
+export const Integrations: React.FC<IntegrationsProps> = ({ activeView = 'integrations' }) => {
   const [settings, setSettings] = useState<IntegrationSettings>({
     emailjs: { serviceId: '', templateIdRecovery: '', templateIdWelcome: '', publicKey: '' },
     eduzz: { webhookUrl: '', liveKey: '', appUrl: '' },
     gemini: { apiKey: '' }
   });
+  
   const [activeTab, setActiveTab] = useState<'eduzz' | 'emailjs' | 'gemini'>('eduzz');
   const [copied, setCopied] = useState(false);
   const { addToast } = useToast();
@@ -19,6 +24,13 @@ export const Integrations: React.FC = () => {
   // Simulation State
   const [simEmail, setSimEmail] = useState('cliente@teste.com');
   const [simStatus, setSimStatus] = useState('3');
+
+  // Mapeamento da View (Rota) para a Aba Interna
+  useEffect(() => {
+    if (activeView === 'eduzz') setActiveTab('eduzz');
+    else if (activeView === 'crm') setActiveTab('emailjs'); // CRM fica na aba de Email/Notificações
+    else if (activeView === 'integrations') setActiveTab('gemini'); // Integrações genéricas vai pra IA
+  }, [activeView]);
 
   useEffect(() => {
     setSettings(authService.getIntegrationSettings());
@@ -83,16 +95,16 @@ export const Integrations: React.FC = () => {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex items-center justify-between mb-8">
         <div>
            <h1 className="text-2xl font-bold text-gray-900 flex items-center">
              <Settings className="mr-3 text-gray-700" /> Central de Integrações
            </h1>
-           <p className="text-gray-600 mt-1">Conecte o SeniorFit a serviços externos e automatize fluxos.</p>
+           <p className="text-gray-600 mt-1">Conecte o SeniorFit a serviços externos, configure IA e automatize fluxos.</p>
         </div>
         <Button onClick={handleSave} variant="blue">
-          <Save size={18} className="mr-2" /> SALVAR ALTERAÇÕES
+          <Save size={18} className="mr-2" /> SALVAR TUDO
         </Button>
       </div>
 
@@ -118,7 +130,7 @@ export const Integrations: React.FC = () => {
                  : 'text-gray-600 hover:bg-white hover:text-gray-900'
                }`}
              >
-               <Mail size={18} className="mr-3" /> Email & CRM
+               <Mail size={18} className="mr-3" /> CRM & Notificações
              </button>
              <button 
                onClick={() => setActiveTab('gemini')}
@@ -134,9 +146,9 @@ export const Integrations: React.FC = () => {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 p-8">
+        <div className="flex-1 p-8 overflow-y-auto max-h-[800px]">
           
-          {/* EDUZZ SETTINGS */}
+          {/* EDUZZ SETTINGS & DASHBOARD */}
           {activeTab === 'eduzz' && (
             <div className="space-y-8 animate-fade-in">
               <div className="flex items-center gap-4 border-b border-gray-100 pb-4">
@@ -144,13 +156,45 @@ export const Integrations: React.FC = () => {
                    <DollarSign size={28} />
                  </div>
                  <div>
-                   <h2 className="text-xl font-bold text-gray-900">Integração Eduzz</h2>
-                   <p className="text-sm text-gray-500">Configuração de Webhooks e Chaves de API.</p>
+                   <h2 className="text-xl font-bold text-gray-900">Eduzz Hub Financeiro</h2>
+                   <p className="text-sm text-gray-500">Monitoramento de vendas e configuração de Webhooks.</p>
                  </div>
+              </div>
+
+              {/* Dashboard Financeiro Fake */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+                   <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-bold text-green-800 uppercase">Receita (Mês)</p>
+                        <h3 className="text-2xl font-black text-gray-900 mt-1">R$ 12.450</h3>
+                      </div>
+                      <TrendingUp size={20} className="text-green-600" />
+                   </div>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                   <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-bold text-blue-800 uppercase">Assinaturas Ativas</p>
+                        <h3 className="text-2xl font-black text-gray-900 mt-1">{authService.getRecentSubscribersCount() + 142}</h3>
+                      </div>
+                      <CreditCard size={20} className="text-blue-600" />
+                   </div>
+                </div>
+                <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100">
+                   <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-bold text-yellow-800 uppercase">Aguardando Pagto</p>
+                        <h3 className="text-2xl font-black text-gray-900 mt-1">8</h3>
+                      </div>
+                      <BarChart size={20} className="text-yellow-600" />
+                   </div>
+                </div>
               </div>
 
               {/* Webhook Configuration */}
               <div className="space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">Configuração de Integração</h3>
                 <Input 
                   label="URL do Aplicativo (Sua Instalação)" 
                   placeholder="Ex: https://app.seniorfit.com" 
@@ -229,7 +273,7 @@ export const Integrations: React.FC = () => {
             </div>
           )}
 
-          {/* EMAILJS SETTINGS */}
+          {/* EMAILJS / CRM SETTINGS */}
           {activeTab === 'emailjs' && (
             <div className="space-y-8 animate-fade-in">
               <div className="flex items-center gap-4 border-b border-gray-100 pb-4">
@@ -237,14 +281,45 @@ export const Integrations: React.FC = () => {
                    <Mail size={28} />
                  </div>
                  <div>
-                   <h2 className="text-xl font-bold text-gray-900">EmailJS & Notificações</h2>
-                   <p className="text-sm text-gray-500">Automação de e-mails transacionais.</p>
+                   <h2 className="text-xl font-bold text-gray-900">CRM & Notificações</h2>
+                   <p className="text-sm text-gray-500">Histórico de disparos e configuração de e-mail transacional.</p>
+                 </div>
+              </div>
+
+              {/* Log de Disparos Fake */}
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
+                 <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                    <h3 className="font-bold text-gray-700 text-sm uppercase">Últimos Disparos (24h)</h3>
+                    <Bell size={16} className="text-gray-400" />
+                 </div>
+                 <div className="divide-y divide-gray-100">
+                    <div className="p-3 flex justify-between items-center hover:bg-gray-50">
+                       <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                          <span className="text-sm text-gray-900">Boas-vindas para <strong>maria.silva@email.com</strong></span>
+                       </div>
+                       <span className="text-xs text-gray-500">10:42 AM</span>
+                    </div>
+                    <div className="p-3 flex justify-between items-center hover:bg-gray-50">
+                       <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                          <span className="text-sm text-gray-900">Recuperação de Senha para <strong>joao.santos@email.com</strong></span>
+                       </div>
+                       <span className="text-xs text-gray-500">09:15 AM</span>
+                    </div>
+                    <div className="p-3 flex justify-between items-center hover:bg-gray-50">
+                       <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                          <span className="text-sm text-gray-900">Falha no envio para <strong>contato@error.com</strong></span>
+                       </div>
+                       <span className="text-xs text-gray-500">Ontem</span>
+                    </div>
                  </div>
               </div>
 
               <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg text-sm text-blue-800">
                 <p>
-                  <strong>Dica:</strong> Crie uma conta em <a href="https://www.emailjs.com/" target="_blank" rel="noreferrer" className="underline font-bold hover:text-blue-900">emailjs.com</a>, configure um serviço (Gmail/Outlook) e crie os templates antes de preencher abaixo.
+                  <strong>Configuração EmailJS:</strong> Crie uma conta em <a href="https://www.emailjs.com/" target="_blank" rel="noreferrer" className="underline font-bold hover:text-blue-900">emailjs.com</a>, configure um serviço (Gmail/Outlook) e crie os templates antes de preencher abaixo.
                 </p>
               </div>
 
@@ -286,14 +361,34 @@ export const Integrations: React.FC = () => {
                  </div>
                  <div>
                    <h2 className="text-xl font-bold text-gray-900">Inteligência Artificial (Gemini)</h2>
-                   <p className="text-sm text-gray-500">Configuração do Tutor IA e Análise Clínica.</p>
+                   <p className="text-sm text-gray-500">Configure a chave de API para habilitar o Tutor IA.</p>
                  </div>
               </div>
 
               <div className="space-y-4">
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
-                  <p>A chave de API do Gemini é configurada via variáveis de ambiente (<code>process.env.API_KEY</code>) para maior segurança.</p>
-                  <p className="mt-2">O sistema gerencia a conexão automaticamente.</p>
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                   <h3 className="font-bold text-gray-900 mb-4 flex items-center">
+                      <Key size={18} className="mr-2 text-indigo-600" /> Google Gemini API Key
+                   </h3>
+                   <div className="space-y-2">
+                      <Input 
+                        label="Chave de API (Começa com AIza...)" 
+                        type="password"
+                        placeholder="Cole sua chave aqui..." 
+                        value={settings.gemini.apiKey}
+                        onChange={(e) => handleChange('gemini', 'apiKey', e.target.value)}
+                      />
+                      <p className="text-xs text-gray-500">
+                        Não tem uma chave? <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Gere uma gratuitamente no Google AI Studio</a>.
+                      </p>
+                   </div>
+                </div>
+
+                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-sm text-indigo-800 flex gap-3">
+                  <div className="mt-0.5"><Bot size={20} /></div>
+                  <div>
+                    <strong>Tutor Ativo:</strong> Ao salvar a chave, o Tutor IA estará disponível na tela de Detalhes do Paciente para auxiliar na interpretação de exames e prescrição de treinos.
+                  </div>
                 </div>
               </div>
             </div>

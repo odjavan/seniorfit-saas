@@ -16,6 +16,7 @@ import { Modal } from './components/Modal';
 import { InstallGuide } from './components/InstallGuide';
 import { ToastProvider } from './contexts/ToastContext';
 
+// Definição dos tipos de views permitidas
 type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'training' | 'agenda';
 
 function AppContent() {
@@ -24,7 +25,7 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<ViewState>('patients');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   
-  // Install/Help Modal
+  // Install/Help Modal States
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [helpVideoUrl, setHelpVideoUrl] = useState('');
@@ -36,9 +37,7 @@ function AppContent() {
 
   useEffect(() => {
     const initAuth = () => {
-      // FORÇA RE-LEITURA: getCurrentUser agora possui auto-correção interna para Admin.
-      // Ao chamar aqui, garantimos que qualquer dado corrompido no storage seja corrigido
-      // antes de definir o estado do React.
+      // Blindagem de Inicialização do Admin
       const storedUser = authService.getCurrentUser();
       if (storedUser) {
         setUser(storedUser);
@@ -48,19 +47,23 @@ function AppContent() {
     initAuth();
   }, []);
 
+  // Redirecionamento inicial baseado na Role
   useEffect(() => {
-    if (user) {
+    if (user && !isInitializing) {
       if (user.role === 'ADMIN') {
-        // Se for admin, mantemos no dashboard ou na view atual se já estiver navegando
+        // Se entrar como admin e estiver na home default, joga pro dashboard
         if (currentView === 'patients') {
             setCurrentView('admin-dashboard');
         }
       } else {
-        // Se não for admin, força para pacientes
-        setCurrentView('patients');
+        // Se não for admin, garante que não está em rota proibida
+        const adminOnlyViews = ['admin-dashboard', 'admin-settings', 'subscribers', 'integrations', 'eduzz', 'crm'];
+        if (adminOnlyViews.includes(currentView)) {
+           setCurrentView('patients');
+        }
       }
     }
-  }, [user]);
+  }, [user, isInitializing]);
 
   const handleLoginSuccess = (loggedInUser: User) => {
     setUser(loggedInUser);
@@ -78,7 +81,7 @@ function AppContent() {
     setShowInstallHelp(!showInstallHelp);
   };
 
-  const handleNavigate = (view: any) => { // FIX: Type 'any' to resolve TS7006
+  const handleNavigate = (view: ViewState) => {
     // Guardião de Rotas Administrativas
     const adminViews = ['admin-settings', 'admin-dashboard', 'subscribers', 'integrations', 'eduzz', 'crm'];
     
@@ -99,7 +102,7 @@ function AppContent() {
   };
 
   const handleUpdatePatient = (updatedPatient: Patient) => {
-    // State update handled by re-render
+    // State update handled by re-render triggered by service update
   };
 
   const getEmbedUrl = (url: string) => {
@@ -135,31 +138,27 @@ function AppContent() {
       
       <Sidebar 
         currentView={currentView === 'patient-details' ? 'patients' : currentView} 
-        onNavigate={(v: any) => handleNavigate(v)} 
+        onNavigate={handleNavigate} 
         userRole={user.role}
       />
       
       <main className="pt-16 lg:ml-64 min-h-[calc(100vh-64px)]">
         
-        {/* ROTAS ADMINISTRATIVAS */}
-        {currentView === 'admin-dashboard' && user.role === 'ADMIN' && (
-          <AdminPanel />
+        {/* === ÁREA ADMINISTRATIVA === */}
+        {user.role === 'ADMIN' && (
+          <>
+            {currentView === 'admin-dashboard' && <AdminPanel />}
+            {currentView === 'admin-settings' && <AdminPanel />}
+            {currentView === 'subscribers' && <Subscribers />}
+            
+            {/* Rota unificada para Integrações, Eduzz e CRM */}
+            {(currentView === 'integrations' || currentView === 'eduzz' || currentView === 'crm') && (
+              <Integrations activeView={currentView} />
+            )}
+          </>
         )}
 
-        {currentView === 'admin-settings' && user.role === 'ADMIN' && (
-          <AdminPanel />
-        )}
-
-        {currentView === 'subscribers' && user.role === 'ADMIN' && (
-          <Subscribers />
-        )}
-
-        {/* Integrações agrupa Eduzz e CRM */}
-        {(currentView === 'integrations' || currentView === 'eduzz' || currentView === 'crm') && user.role === 'ADMIN' && (
-          <Integrations />
-        )}
-
-        {/* ROTAS COMUNS / CLÍNICAS */}
+        {/* === ÁREA CLÍNICA E COMUM === */}
         {currentView === 'agenda' && (
           <Agenda />
         )}
@@ -206,7 +205,7 @@ function AppContent() {
                  </div>
                )}
                <div className="text-center text-xs text-gray-400 pt-4 border-t border-gray-100">
-                 Versão 1.28.2 (Master Secure)
+                 Versão 1.28.3 (Master Stable)
                </div>
             </div>
          </Modal>

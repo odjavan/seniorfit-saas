@@ -10,189 +10,141 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Tratamento de CORS
+  // 1. Handshake rápido de CORS
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
+    // 2. Init Supabase Admin
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
+      { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    // Leitura do Body como Texto primeiro para evitar erros de JSON.parse em body vazio
+    // 3. Leitura Segura do Payload
     let bodyText = "";
-    try {
-      bodyText = await req.text();
-    } catch (e) {
-      console.warn("Falha ao ler body text");
-    }
-
-    if (!bodyText) {
-       console.log("Body vazio recebido.");
-       return new Response(JSON.stringify({ message: "Empty body" }), { status: 200, headers: corsHeaders });
-    }
-
-    const payload = JSON.parse(bodyText);
-
-    // --- LOG DE ENTRADA OBRIGATÓRIO (Solicitado) ---
-    console.log("Payload Completo:", JSON.stringify(payload));
-
-    // --- ESTRATÉGIA DE EXTRAÇÃO (Prioridade: Formato Real identificado) ---
+    try { bodyText = await req.text(); } catch(e) {}
+    if (!bodyText) return new Response(JSON.stringify({msg: "Empty"}), {status: 200, headers: corsHeaders});
     
-    // 1. E-mail (Chave principal)
-    // Tenta: payload.buyer.email (Formato Real) -> payload.email -> payload.trans_email (Legado)
+    const payload = JSON.parse(bodyText);
+    console.log("PAYLOAD RECEBIDO:", JSON.stringify(payload)); // Log essencial
+
+    // 4. Extração de Dados (Lógica da Rede de Pesca)
     const email = (
         payload.buyer?.email || 
         payload.email || 
         payload.trans_email || 
-        payload.data?.buyer?.email || // Caso venha encapsulado em 'data'
+        payload.data?.buyer?.email || 
         ""
     ).toLowerCase().trim();
 
-    // 2. Nome
-    const name = (
-        payload.buyer?.name || 
-        payload.name || 
-        payload.cus_name || 
-        "Assinante SeniorFit"
-    );
-
-    // 3. CPF
-    const cpf = (
-        payload.buyer?.document || 
-        payload.doc || 
-        payload.cus_taxnumber || 
-        ""
-    );
-
-    // 4. ID da Transação
-    // Tenta: payload.id (Formato Real) -> payload.invoice.id -> payload.trans_cod
-    const eduzzId = (
-        payload.id || 
-        payload.invoice?.id || 
-        payload.trans_cod || 
-        ""
-    ).toString();
-
-    // 5. Status
-    // Tenta: payload.status (Formato Real) -> payload.trans_status
-    const rawStatus = String(
-        payload.status || 
-        payload.trans_status || 
-        payload.chk_status || 
-        ""
-    ).toLowerCase();
-
-    console.log(`DADOS MAPEADOS -> Email: [${email}] | ID: [${eduzzId}] | Status: [${rawStatus}]`);
-
-    // --- HANDSHAKE VS PROCESSAMENTO ---
-    
-    // Se não encontrou e-mail, assume que é apenas verificação de URL ou ping da Eduzz.
-    // Retorna 200 para não quebrar a integração, mas avisa no log.
+    // Handshake Eduzz (Sem e-mail = Ping de validação)
     if (!email) {
-        console.log("HANDSHAKE: E-mail não encontrado nos campos mapeados. Retornando 200 OK para validação.");
-        return new Response(JSON.stringify({ 
-            success: true, 
-            message: "Handshake Accepted. Waiting for payload with email." 
-        }), { status: 200, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, msg: "Handshake OK" }), { status: 200, headers: corsHeaders });
     }
 
-    // --- LÓGICA DE STATUS ---
-    
-    let subscriptionStatus = 'inactive';
-    
-    // Lista expandida de status de sucesso
-    // 'paid' vem do payload.status real
-    // '3' vem do payload.trans_status legado
-    const paidStatuses = ['paid', 'approved', 'completa', '3', 'active'];
-    const pendingStatuses = ['waiting', 'review', 'open', '1', 'waiting_payment'];
-    
-    if (paidStatuses.includes(rawStatus)) {
-        subscriptionStatus = 'active';
-    } else if (pendingStatuses.includes(rawStatus)) {
-        subscriptionStatus = 'pending';
-    } else {
-        subscriptionStatus = 'cancelled';
+    const name = payload.buyer?.name || payload.name || payload.cus_name || "Assinante SeniorFit";
+    const cpf = payload.buyer?.document || payload.doc || "";
+    const eduzzId = (payload.id || payload.invoice?.id || payload.trans_cod || "").toString();
+    const rawStatus = String(payload.status || payload.trans_status || "").toLowerCase();
+
+    // 5. Auditoria (Webhook Logs) - Execução segura
+    // Gravamos o log, mas não deixamos falhar a requisição principal se a tabela não existir
+    try {
+        await supabaseAdmin.from('webhook_logs').insert({
+            event_type: 'eduzz_transaction',
+            payload: payload,
+            email: email,
+            eduzz_id: eduzzId,
+            status: rawStatus,
+            created_at: new Date().toISOString()
+        });
+    } catch (logError) {
+        console.warn("Aviso: Falha ao gravar webhook_logs (não crítico).", logError);
     }
 
-    // --- OPERAÇÕES NO BANCO DE DADOS ---
-
+    // 6. Resolução de ID do Usuário (ESTRATÉGIA FAST-PATH)
     let userId = null;
-    let action = 'none';
+    let isNewUser = false;
 
-    // 1. Verificar/Criar Auth User
-    const { data: { users }, error: searchError } = await supabaseAdmin.auth.admin.listUsers();
-    const existingAuthUser = users?.find(u => u.email?.toLowerCase() === email);
+    // A: Check Rápido no Banco (Indexado) - Mais rápido que Auth API
+    const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .single();
 
-    if (existingAuthUser) {
-        userId = existingAuthUser.id;
-        action = 'updated_auth';
-        console.log(`Usuário Auth existente: ${userId}`);
+    if (existingProfile) {
+        userId = existingProfile.id;
+        console.log("Fast-Path: Usuário encontrado no banco.");
     } else {
-        console.log(`Criando novo usuário Auth: ${email}`);
-        action = 'created_auth';
-        
-        const initialPassword = cpf.replace(/\D/g, '') || "SeniorFit123";
-        
+        // B: Tenta criar no Auth (Se não existe no banco, provável ser novo)
+        console.log("Fast-Path: Criando usuário no Auth...");
         const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
             email: email,
-            password: initialPassword,
+            password: cpf.replace(/\D/g, '') || "SeniorFit123",
             email_confirm: true,
             user_metadata: { full_name: name }
         });
 
-        if (createError) {
-             // Se erro for duplicidade (pode acontecer em race condition), tentamos recuperar
-             console.error(`Erro ao criar usuário: ${createError.message}`);
-             throw new Error(`Auth Create Failed: ${createError.message}`);
+        if (newUser?.user) {
+            userId = newUser.user.id;
+            isNewUser = true;
+        } else if (createError?.message?.includes("already registered")) {
+            // C: Fallback Lento - Só executa se houver inconsistência (Auth existe, Profile não)
+            console.log("Fallback: Usuário existe no Auth mas sem perfil. Buscando ID...");
+            const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+            const foundUser = userList.users.find(u => u.email?.toLowerCase() === email);
+            if (foundUser) userId = foundUser.id;
         }
-        userId = newUser.user.id;
     }
 
-    // 2. Upsert na tabela Profiles
+    if (!userId) {
+        // Se falhou tudo, retornamos 200 com erro logado para não travar a Eduzz (ela vai tentar de novo se dermos 500)
+        console.error("ERRO CRÍTICO: Não foi possível resolver o ID do usuário.");
+        return new Response(JSON.stringify({ error: "User ID resolution failed" }), { status: 200, headers: corsHeaders });
+    }
+
+    // 7. Mapeamento de Status
+    const paidStatuses = ['paid', 'approved', 'completa', '3', 'active'];
+    const pendingStatuses = ['waiting', 'review', 'open', '1', 'waiting_payment'];
+    let finalStatus = 'cancelled';
+    if (paidStatuses.includes(rawStatus)) finalStatus = 'active';
+    else if (pendingStatuses.includes(rawStatus)) finalStatus = 'pending';
+
+    // 8. Persistência Final (Upsert Profile)
     const profileData = {
-      id: userId,
-      email: email,
-      name: name,
-      // Se for criação nova, define role. Se já existe, não sobrescreve (segurança para não rebaixar admins)
-      ...(action === 'created_auth' ? { role: 'subscriber' } : {}),
-      cpf: cpf || undefined,
-      eduzz_id: eduzzId,
-      eduzz_status: rawStatus,
-      subscription_status: subscriptionStatus,
-      eduzz_last_update: new Date().toISOString()
+        id: userId,
+        email: email,
+        name: name,
+        cpf: cpf || undefined,
+        eduzz_id: eduzzId,
+        eduzz_status: rawStatus,
+        subscription_status: finalStatus,
+        eduzz_last_update: new Date().toISOString(),
+        // Se for novo usuário detectado no passo B, define role. Se já existia, mantém.
+        ...(isNewUser ? { role: 'subscriber' } : {})
     };
 
-    console.log("Salvando Profile:", JSON.stringify(profileData));
+    const { error: upsertError } = await supabaseAdmin.from('profiles').upsert(profileData);
 
-    const { error: dbError } = await supabaseAdmin
-        .from('profiles')
-        .upsert(profileData);
-
-    if (dbError) {
-        console.error("Erro DB Profile:", dbError);
-        throw new Error(`Profile Upsert Failed: ${dbError.message}`);
+    if (upsertError) {
+        console.error("Erro ao salvar profile:", upsertError);
+        // Retornamos 200 mesmo com erro de banco para limpar a fila da Eduzz, já que logamos o erro
+        return new Response(JSON.stringify({ error: "DB Error" }), { status: 200, headers: corsHeaders });
     }
 
-    console.log("PROCESSAMENTO CONCLUÍDO COM SUCESSO.");
+    console.log(`SUCESSO: ${email} -> ${finalStatus}`);
 
+    // 9. Resposta Imediata
     return new Response(JSON.stringify({ 
         success: true, 
-        userId: userId, 
-        status: subscriptionStatus,
-        eduzz_ref: eduzzId
+        userId: userId,
+        status: finalStatus
     }), { status: 200, headers: corsHeaders });
 
   } catch (err: any) {
-    console.error("ERRO FATAL NO WEBHOOK:", err);
-    // Retornamos 500 para que a Eduzz saiba que falhou e tente reenviar se for o caso
-    // (A menos que seja erro de validação de dados, mas aqui tratamos como erro de servidor)
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
+    console.error("EXCEPTION:", err);
+    return new Response(JSON.stringify({ error: err.message }), { status: 200, headers: corsHeaders });
   }
 })

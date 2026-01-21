@@ -1,62 +1,266 @@
 import { supabase } from '../lib/supabase';
+import { User, Role, SystemSettings, IntegrationSettings } from '../types';
+import { generateId } from '../utils/generateId';
 
-const SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
+const DEFAULT_SETTINGS: SystemSettings = {
+  howToInstallVideoUrl: '',
+};
+
+// ID Singleton para garantir que só exista uma linha de configuração na tabela nova
+const SYSTEM_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
 
 export const authService = {
-  // --- FUNÇÕES DE CONFIGURAÇÃO (Novas) ---
-  async getIntegrationSettings() {
+  // --- Auth Core ---
+
+  login: async (email: string, password: string): Promise<User> => {
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError) throw new Error(authError.message);
+    if (!authData.user) throw new Error('Usuário não encontrado.');
+
+    // Busca dados complementares na tabela profiles
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authData.user.id)
+      .single();
+
+    // Fallback caso o profile não exista (primeiro login ou erro de sync)
+    if (profileError || !profile) {
+      return {
+        id: authData.user.id,
+        email: authData.user.email!,
+        name: 'Usuário',
+        role: 'TRAINER', // Default role
+        createdAt: new Date().toISOString(),
+        subscriptionStatus: 'active'
+      };
+    }
+
+    return {
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      role: profile.role as Role,
+      createdAt: profile.created_at,
+      subscriptionStatus: profile.subscription_status,
+      cpf: profile.cpf,
+      eduzzId: profile.eduzz_id
+    };
+  },
+
+  logout: async () => {
+    await supabase.auth.signOut();
+    localStorage.clear(); 
+  },
+
+  getCurrentUser: async (): Promise<User | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+
+    if (!profile) return null;
+
+    return {
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      role: profile.role as Role,
+      createdAt: profile.created_at,
+      subscriptionStatus: profile.subscription_status,
+      cpf: profile.cpf,
+      eduzzId: profile.eduzz_id
+    };
+  },
+
+  // --- User Management (Admin) ---
+
+  getAllUsers: async (): Promise<User[]> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Erro ao buscar usuários:', error);
+      return [];
+    }
+
+    return data.map((profile: any) => ({
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      role: profile.role as Role,
+      createdAt: profile.created_at,
+      subscriptionStatus: profile.subscription_status,
+      cpf: profile.cpf,
+      eduzzId: profile.eduzz_id,
+      lastPaymentDate: profile.last_payment_date
+    }));
+  },
+
+  createUser: async (userData: Partial<User>): Promise<void> => {
+    // Nota: A criação real de Auth requer Service Role Key no backend.
+    // Aqui inserimos no 'profiles' para que o Admin veja o usuário na lista.
+    // O ideal é ter um fluxo de convite ou Edge Function para criar o Auth.
+    
+    const fakeId = generateId(); // ID temporário
+    
+    const { error } = await supabase.from('profiles').insert([{
+      id: fakeId,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role || 'SUBSCRIBER',
+      cpf: userData.cpf,
+      eduzz_id: userData.eduzzId,
+      subscription_status: userData.subscriptionStatus || 'active',
+      created_at: new Date().toISOString()
+    }]);
+
+    if (error) throw new Error(error.message);
+  },
+
+  updateUser: async (user: User): Promise<void> => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        name: user.name,
+        role: user.role,
+        cpf: user.cpf,
+        eduzz_id: user.eduzzId,
+        subscription_status: user.subscriptionStatus
+      })
+      .eq('id', user.id);
+
+    if (error) throw new Error(error.message);
+  },
+
+  deleteUser: async (id: string): Promise<void> => {
+    const { error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw new Error(error.message);
+  },
+
+  getRecentSubscribersCount: async (): Promise<number> => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const { count, error } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'SUBSCRIBER')
+      .gte('created_at', today.toISOString());
+
+    if (error) return 0;
+    return count || 0;
+  },
+
+  // --- System Settings (Admin Panel - Video URL) ---
+  // Mapeado para a nova tabela system_settings na coluna video_url
+
+  getSettings: async (): Promise<SystemSettings> => {
+    try {
+      const { data } = await supabase
+        .from('system_settings')
+        .select('video_url')
+        .eq('id', SYSTEM_SETTINGS_ID)
+        .single();
+        
+      if (data && data.video_url) {
+        return { howToInstallVideoUrl: data.video_url };
+      }
+    } catch (e) {
+      console.warn('Erro ao ler settings, usando padrão.');
+    }
+    return DEFAULT_SETTINGS;
+  },
+
+  updateSettings: async (settings: SystemSettings): Promise<void> => {
+    // Upsert na tabela nova usando o ID fixo
+    const { error } = await supabase.from('system_settings').upsert({
+      id: SYSTEM_SETTINGS_ID,
+      video_url: settings.howToInstallVideoUrl
+    });
+
+    if (error) throw new Error(error.message);
+  },
+
+  // --- Integrations (Admin Panel - API Keys) ---
+  // Mapeado para a nova tabela system_settings
+
+  getIntegrationSettings: async (): Promise<IntegrationSettings> => {
     const { data, error } = await supabase
       .from('system_settings')
       .select('*')
-      .eq('id', SETTINGS_ID)
+      .eq('id', SYSTEM_SETTINGS_ID)
       .single();
-    if (error && error.code !== 'PGRST116') throw error;
-    return data;
+
+    if (error || !data) {
+      return {
+        emailjs: { serviceId: '', templateIdRecovery: '', templateIdWelcome: '', publicKey: '' },
+        eduzz: { webhookUrl: '', liveKey: '', appUrl: '' },
+        gemini: { apiKey: '' }
+      };
+    }
+
+    // Mapeamento Flat (DB) -> Nested (App)
+    return {
+      emailjs: {
+        serviceId: data.emailjs_service_id || '',
+        templateIdRecovery: data.emailjs_template_recovery || '',
+        templateIdWelcome: data.emailjs_template_welcome || '',
+        publicKey: data.emailjs_public_key || ''
+      },
+      eduzz: {
+        // Reconstrói a URL do webhook baseada no app_url salvo
+        webhookUrl: data.app_url ? `${data.app_url.replace(/\/$/, '')}/api/webhooks/eduzz` : '',
+        liveKey: '', 
+        appUrl: data.app_url || ''
+      },
+      gemini: {
+        apiKey: data.gemini_api_key || ''
+      }
+    };
   },
 
-  async updateIntegrationSettings(settings: any) {
+  updateIntegrationSettings: async (settings: IntegrationSettings): Promise<void> => {
+    const payload = {
+      id: SYSTEM_SETTINGS_ID,
+      gemini_api_key: settings.gemini.apiKey,
+      emailjs_service_id: settings.emailjs.serviceId,
+      emailjs_public_key: settings.emailjs.publicKey,
+      emailjs_template_welcome: settings.emailjs.templateIdWelcome,
+      emailjs_template_recovery: settings.emailjs.templateIdRecovery,
+      app_url: settings.eduzz.appUrl
+    };
+
     const { error } = await supabase
       .from('system_settings')
-      .upsert({
-        id: SETTINGS_ID,
-        ...settings,
-        updated_at: new Date().toISOString()
-      });
-    if (error) throw error;
+      .upsert(payload);
+
+    if (error) {
+      throw new Error('Falha ao salvar configurações no banco de dados: ' + error.message);
+    }
   },
 
-  // --- FUNÇÕES VITAIS RESTAURADAS (O Cérebro do APP) ---
-  async login(credentials: any) {
-    const { data, error } = await supabase.auth.signInWithPassword(credentials);
-    if (error) throw error;
-    return data;
-  },
-
-  async logout() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  },
-
-  async getCurrentUser() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-    return { ...user, ...data };
-  },
-
-  async getAllUsers() {
-    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    return data;
-  },
-
-  async updateUser(id: string, updates: any) {
-    const { error } = await supabase.from('profiles').update(updates).eq('id', id);
-    if (error) throw error;
-  },
-
-  async deleteUser(id: string) {
-    const { error } = await supabase.from('profiles').delete().eq('id', id);
-    if (error) throw error;
+  // --- Webhook Simulation ---
+  simulateEduzzWebhook: (payload: any) => {
+     console.log("Simulando Webhook:", payload);
+     return { 
+       success: true, 
+       action: 'updated', 
+       user: { name: payload.cus_name, email: payload.cus_email } 
+     };
   }
 };

@@ -27,7 +27,7 @@ serve(async (req) => {
     if (!bodyText) return new Response(JSON.stringify({msg: "Empty"}), {status: 200, headers: corsHeaders});
     
     const payload = JSON.parse(bodyText);
-    console.log("PAYLOAD COMPLETO:", JSON.stringify(payload)); // Log para debug detalhado
+    console.log("PAYLOAD COMPLETO:", JSON.stringify(payload)); 
 
     // 1. FILTRO DE PRODUTO
     let incomingProductId = (
@@ -42,7 +42,7 @@ serve(async (req) => {
 
     console.log(`Filtrando Produto: [${incomingProductId}] | Status: [${rawStatus}]`);
 
-    // Bloqueio de produtos estranhos (Se houver ID e não for o nosso)
+    // Bloqueio de produtos estranhos
     if (incomingProductId && incomingProductId !== TARGET_PRODUCT_ID) {
         console.log(`PRODUTO IGNORADO: Recebido ${incomingProductId} diferente do alvo ${TARGET_PRODUCT_ID}.`);
         return new Response(JSON.stringify({ message: "Product ignored" }), { status: 200, headers: corsHeaders });
@@ -61,8 +61,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ success: true, msg: "Handshake OK" }), { status: 200, headers: corsHeaders });
     }
 
-    // CORREÇÃO CRÍTICA DE NOME:
-    // Priorizamos buyer.name (Padrão V3), depois cus_name (Legacy/Testes), depois data.buyer.name
+    // EXTRAÇÃO DE NOME CORRIGIDA E PRIORIZADA
     const name = 
         payload.buyer?.name || 
         payload.cus_name || 
@@ -102,7 +101,6 @@ serve(async (req) => {
     let isNewUser = false;
     const initialPassword = cpf.replace(/\D/g, '') || "123456"; 
 
-    // Busca perfil existente
     const { data: existingProfile } = await supabaseAdmin
         .from('profiles')
         .select('id')
@@ -125,7 +123,6 @@ serve(async (req) => {
             userId = newUser.user.id;
             isNewUser = true;
         } else {
-            // Fallback: Tenta achar no Auth se falhar (inconsistência Auth vs Profiles)
             const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
             const foundUser = userList.users.find(u => u.email?.toLowerCase() === email);
             if (foundUser) userId = foundUser.id;
@@ -137,16 +134,17 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "User ID resolution failed" }), { status: 200, headers: corsHeaders });
     }
 
-    // 6. Upsert Profile (CORREÇÃO: FORÇAR ROLE E NOME)
+    // 6. Upsert Profile - CORREÇÃO DE VISIBILIDADE
+    // 'role' deve ser 'SUBSCRIBER' (Maiúsculo) para bater com o Frontend types.ts
     const { error: upsertError } = await supabaseAdmin.from('profiles').upsert({
         id: userId,
         email: email,
-        name: name, // Agora usa a variável com a extração correta
+        name: name,
         cpf: cpf || undefined,
         eduzz_id: eduzzId,
         eduzz_status: rawStatus,
         subscription_status: finalStatus,
-        role: 'subscriber', // FORÇADO: Garante que apareça na lista de Assinantes
+        role: 'SUBSCRIBER', // CORREÇÃO: Maiúsculo para aparecer no Painel Admin
         eduzz_last_update: new Date().toISOString()
     });
 

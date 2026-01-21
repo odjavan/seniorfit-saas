@@ -59,7 +59,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ success: true, msg: "Handshake OK" }), { status: 200, headers: corsHeaders });
     }
 
-    // Mapeamento de Nome: Buyer Name (V3) > Cus Name (Legacy) > Fallback
+    // Mapeamento de Nome: Prioridade para payload.buyer.name (V3)
     const name = 
         payload.buyer?.name || 
         payload.cus_name || 
@@ -121,18 +121,18 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "User resolution failed" }), { status: 200, headers: corsHeaders });
     }
 
-    // 7. Upsert Definitivo (Visibilidade Garantida)
-    // Forçamos role='subscriber' e status='active' (MINÚSCULAS) conforme solicitado explicitamente
+    // 7. Upsert Definitivo (V7: Padrão MAIÚSCULO SeniorFit)
+    // Gravamos 'SUBSCRIBER' e 'ACTIVE' explicitamente
     const { error: upsertError } = await supabaseAdmin.from('profiles').upsert({
         id: userId,
         email: email,
-        name: name, // Usa a variável 'name' com prioridade para payload.buyer.name
+        name: name, // Mapeado de payload.buyer.name
         cpf: cpf || undefined,
         eduzz_id: eduzzId,
         
-        // CAMPOS DE VISIBILIDADE FORÇADOS (MINÚSCULOS):
-        role: 'subscriber', 
-        subscription_status: 'active', 
+        // PADRÃO SENIORFIT (UPPERCASE)
+        role: 'SUBSCRIBER', 
+        subscription_status: 'ACTIVE', 
         
         eduzz_last_update: new Date().toISOString()
     });
@@ -140,14 +140,14 @@ serve(async (req) => {
     if (upsertError) {
         console.error("Erro ao atualizar profile:", upsertError);
     } else {
-        console.log(`Sucesso: ${name} (${email}) -> active subscriber`);
+        console.log(`Sucesso V7: ${name} (${email}) -> SUBSCRIBER ACTIVE`);
     }
 
-    // 8. Resposta Rápida (Otimizada sem integrações externas)
+    // 8. Resposta Rápida
     return new Response(JSON.stringify({ 
         success: true, 
         userId: userId,
-        status_forced: 'active'
+        status_forced: 'ACTIVE'
     }), { status: 200, headers: corsHeaders });
 
   } catch (err: any) {

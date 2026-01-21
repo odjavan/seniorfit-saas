@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { authService } from '../services/authService';
-import { toast } from 'react-hot-toast'; // Ou o componente de alerta que seu APP usa
+import { useToast } from '../context/ToastContext'; // Ajustado para o padrão do seu APP
 
 const Integrations = () => {
+  const { addToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState({
     gemini_api_key: '',
@@ -13,7 +14,6 @@ const Integrations = () => {
     app_url: ''
   });
 
-  // 1. CARREGAR DADOS: Busca as informações assim que a página abre
   useEffect(() => {
     async function loadSettings() {
       try {
@@ -29,20 +29,19 @@ const Integrations = () => {
           });
         }
       } catch (error) {
-        console.error("Falha ao carregar configurações");
+        addToast('Erro ao carregar configurações', 'error');
       }
     }
     loadSettings();
-  }, []);
+  }, [addToast]);
 
-  // 2. SALVAR DADOS: Envia para o motor gravar no Supabase
   const handleSave = async () => {
     setLoading(true);
     try {
       await authService.updateIntegrationSettings(settings);
-      toast.success('Configurações salvas com sucesso!');
+      addToast('Configurações salvas com sucesso!', 'success');
     } catch (error) {
-      toast.error('Erro ao salvar configurações.');
+      addToast('Erro ao salvar configurações', 'error');
     } finally {
       setLoading(false);
     }
@@ -62,7 +61,6 @@ const Integrations = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* URL DO APP */}
         <div className="bg-white p-4 rounded shadow">
           <label className="block text-sm font-medium mb-1">URL do Aplicativo</label>
           <input 
@@ -70,11 +68,10 @@ const Integrations = () => {
             className="w-full border p-2 rounded"
             value={settings.app_url}
             onChange={(e) => setSettings({...settings, app_url: e.target.value})}
-            placeholder="http://seu-app.io"
+            placeholder="http://m000g8g..."
           />
         </div>
 
-        {/* GEMINI */}
         <div className="bg-white p-4 rounded shadow">
           <label className="block text-sm font-medium mb-1">Google Gemini API Key</label>
           <input 
@@ -85,7 +82,6 @@ const Integrations = () => {
           />
         </div>
 
-        {/* EMAILJS */}
         <div className="bg-white p-4 rounded shadow md:col-span-2">
           <h2 className="font-bold mb-4">Configurações EmailJS</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -111,7 +107,7 @@ const Integrations = () => {
               placeholder="Template ID (Recuperação)"
               className="border p-2 rounded"
               value={settings.emailjs_template_recovery}
-            onChange={(e) => setSettings({...settings, emailjs_template_recovery: e.target.value})}
+              onChange={(e) => setSettings({...settings, emailjs_template_recovery: e.target.value})}
             />
           </div>
         </div>
@@ -120,4 +116,4 @@ const Integrations = () => {
   );
 };
 
-export default Integrations;
+export default Integrations; // Exportação padrão mantida para bater com App.tsx

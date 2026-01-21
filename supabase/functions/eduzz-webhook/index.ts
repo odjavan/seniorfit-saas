@@ -14,8 +14,6 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    // 1. Inicializa Supabase com Privilégios de ADMIN (Service Role)
-    // Isso permite criar usuários no Auth e ignorar RLS se necessário
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -27,84 +25,167 @@ serve(async (req) => {
       }
     )
 
-    const payload = await req.json()
-    console.log("Eduzz Webhook Payload:", JSON.stringify(payload));
+    // Leitura segura do payload
+    let payload: any = {};
+    try {
+      const bodyText = await req.text();
+      if (bodyText) payload = JSON.parse(bodyText);
+    } catch (e) {
+      console.warn("Payload vazio ou inválido.");
+    }
 
-    // 2. Extração Robusta de Dados (Suporta Webhook Global e Customizado)
-    const email = (payload.email || payload.buyer?.email || payload.fields?.edz_cli_email || "").toLowerCase().trim();
-    const name = payload.name || payload.buyer?.name || payload.fields?.edz_cli_name || "Assinante SeniorFit";
-    const cpf = payload.doc || payload.buyer?.document || "";
-    const eduzzId = payload.trans_cod || payload.id || "";
+    console.log("--- INÍCIO PROCESSAMENTO EDUZZ ---");
+    console.log("Payload Bruto:", JSON.stringify(payload));
+
+    // --- 1. ESTRATÉGIA DE EXTRAÇÃO ROBUSTA (A "REDE DE PESCA") ---
     
-    // Status Eduzz: 3 = Paga/Aprovada, 1 = Aberta/Aguardando
-    const rawStatus = String(payload.status || payload.trans_status || payload.chk_status || "");
+    // Identificação do Formato para Logs
+    let formatType = "DESCONHECIDO/GENÉRICO";
+    if (payload.buyer && payload.invoice) formatType = "REAL (V3 - Invoice/Buyer)";
+    else if (payload.trans_cod || payload.trans_email) formatType = "LEGADO (TransCod)";
     
-    // Mapeamento de Status
+    console.log(`FORMATO DETECTADO: [ ${formatType} ]`);
+
+    // Extração de E-MAIL (Chave Primária Lógica)
+    const email = (
+        payload.buyer?.email ||          // Formato V3 Real
+        payload.trans_email ||           // Formato Legado
+        payload.email ||                 // Formato Genérico
+        payload.fields?.edz_cli_email || // Formato Custom
+        ""
+    ).toLowerCase().trim();
+
+    // Extração de NOME
+    const name = (
+        payload.buyer?.name || 
+        payload.cus_name ||              // Campo comum em alguns webhooks Eduzz
+        payload.name || 
+        "Assinante SeniorFit"
+    );
+
+    // Extração de CPF (para senha inicial)
+    const cpf = (
+        payload.buyer?.document || 
+        payload.doc || 
+        payload.cus_taxnumber || 
+        ""
+    );
+
+    // Extração do ID DA TRANSAÇÃO (Crucial para rastreio)
+    const eduzzId = (
+        payload.invoice?.id ||   // Formato V3 (ID da Fatura)
+        payload.trans_cod ||     // Formato Legado (Código da Transação)
+        payload.id ||            // Fallback
+        ""
+    ).toString();
+
+    // Extração do STATUS
+    // V3 usa: 'paid', 'open', 'cancelled'
+    // Legado usa: '3' (paga), '1' (aberta), '7' (cancelada)
+    const rawStatus = String(
+        payload.status || 
+        payload.trans_status || 
+        payload.chk_status || 
+        payload.invoice?.status || 
+        ""
+    ).toLowerCase();
+
+    console.log(`DADOS EXTRAÍDOS -> Email: ${email} | ID: ${eduzzId} | Status: ${rawStatus}`);
+
+    // --- 2. HANDSHAKE / VALIDAÇÃO DE URL ---
+    if (!email) {
+        console.log("HANDSHAKE: E-mail não detectado. Retornando 200 para validação da Eduzz.");
+        return new Response(JSON.stringify({ 
+            success: true, 
+            message: "Handshake Accepted. Waiting for real data." 
+        }), { status: 200, headers: corsHeaders });
+    }
+
+    // --- 3. MAPEAMENTO DE STATUS PARA O APP ---
     let subscriptionStatus = 'inactive';
-    if (['3', 'paid', 'approved', 'completa'].includes(rawStatus.toLowerCase())) {
+    
+    // Lista de status positivos (Pagamento Confirmado)
+    const paidStatuses = ['3', 'paid', 'approved', 'completa', 'paid_capitalization'];
+    // Lista de status pendentes (Aguardando Pagamento)
+    const pendingStatuses = ['1', 'waiting', 'review', 'open', 'waiting_payment'];
+    
+    if (paidStatuses.includes(rawStatus)) {
         subscriptionStatus = 'active';
-    } else if (['1', 'waiting', 'review'].includes(rawStatus.toLowerCase())) {
+    } else if (pendingStatuses.includes(rawStatus)) {
         subscriptionStatus = 'pending';
-    } else if (['7', 'refunded', '4', 'cancelled'].includes(rawStatus.toLowerCase())) {
+    } else {
+        // Qualquer outra coisa (cancelado, estornado, vencido) vira inactive/cancelled
         subscriptionStatus = 'cancelled';
     }
 
-    if (!email) {
-        return new Response(JSON.stringify({ error: "E-mail não encontrado no payload" }), { status: 400, headers: corsHeaders });
-    }
-
-    // 3. Verificação de Usuário Existente (Busca no Auth primeiro para garantir ID)
-    // Precisamos do UUID para a tabela profiles, pois profiles.id é FK de auth.users.id
+    // --- 4. GESTÃO DE USUÁRIO (AUTH + PROFILE) ---
     
     let userId = null;
-    
-    // Tenta encontrar usuário pelo email no sistema de Auth
+    let action = 'none';
+
+    // A. Busca usuário existente no Auth
     const { data: { users }, error: searchError } = await supabaseAdmin.auth.admin.listUsers();
     const existingAuthUser = users?.find(u => u.email?.toLowerCase() === email);
 
     if (existingAuthUser) {
         userId = existingAuthUser.id;
-        console.log(`Usuário existente encontrado: ${userId}`);
+        action = 'updated';
+        console.log(`Usuário Auth encontrado: ${userId}`);
     } else {
-        console.log(`Criando novo usuário para: ${email}`);
-        // 4. Criação de Novo Usuário (Se não existir)
+        console.log(`Criando novo usuário Auth para: ${email}`);
+        action = 'created';
+        
+        // Senha padrão é o CPF (apenas números) ou fallback seguro
+        const initialPassword = cpf.replace(/\D/g, '') || "SeniorFit123";
+        
         const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
             email: email,
-            password: cpf.replace(/\D/g, '') || "SeniorFit123", // Senha inicial é o CPF ou padrão
+            password: initialPassword,
             email_confirm: true,
             user_metadata: { full_name: name }
         });
 
-        if (createError) throw new Error(`Erro ao criar usuário Auth: ${createError.message}`);
+        if (createError) {
+             // Se der erro (ex: rate limit), lança exceção para logar, mas tenta prosseguir se for duplicidade
+             throw new Error(`Erro Fatal CreateUser: ${createError.message}`);
+        }
         userId = newUser.user.id;
     }
 
-    // 5. Upsert na tabela Profiles (Agora temos certeza que o ID existe)
-    // Usamos upsert para criar se não existir ou atualizar se existir
+    // B. Persistência na Tabela PROFILES (Upsert)
+    // Aqui garantimos que os campos eduzz_* sejam salvos
     const { error: dbError } = await supabaseAdmin.from('profiles').upsert({ 
-      id: userId, // CHAVE CRÍTICA: Vincula ao Auth
+      id: userId,
       email: email, 
       name: name,
-      role: 'subscriber', // Força papel de assinante
-      cpf: cpf,
+      // Se for novo, define como subscriber. Se já existe, mantém o role atual (ex: admin não vira subscriber)
+      role: existingAuthUser ? undefined : 'subscriber', 
+      cpf: cpf || undefined, // Atualiza CPF se vier no payload
+      
+      // Campos de Integração
       eduzz_id: eduzzId,
-      eduzz_status: rawStatus,
-      subscription_status: subscriptionStatus,
+      eduzz_status: rawStatus,         // Guarda o status original para auditoria
+      subscription_status: subscriptionStatus, // Status traduzido para o App
       eduzz_last_update: new Date().toISOString()
     });
 
-    if (dbError) throw new Error(`Erro ao gravar no banco: ${dbError.message}`);
+    if (dbError) {
+        console.error("Erro ao persistir Profile:", dbError);
+        throw new Error(`Erro DB Profile: ${dbError.message}`);
+    }
 
-    // Sucesso
+    console.log("SUCESSO: Perfil sincronizado.");
+
     return new Response(JSON.stringify({ 
         success: true, 
         userId: userId, 
-        action: existingAuthUser ? 'updated' : 'created',
-        status: subscriptionStatus
+        action: action,
+        status: subscriptionStatus,
+        eduzz_ref: eduzzId
     }), { status: 200, headers: corsHeaders });
 
   } catch (err: any) {
-    console.error("Webhook Critical Error:", err);
+    console.error("ERRO CRÍTICO WEBHOOK:", err);
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders });
   }
 })

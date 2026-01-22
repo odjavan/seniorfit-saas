@@ -57,7 +57,7 @@ export const Subscribers: React.FC = () => {
       setFormData({
         name: user.name,
         email: user.email,
-        password: '', // Em edição, senha vazia significa "não alterar" (embora alteração não seja feita aqui)
+        password: '', // Em edição, senha vazia significa "não alterar"
         role: user.role,
         cpf: user.cpf || '',
         eduzzId: user.eduzzId || '',

@@ -54,14 +54,15 @@ export const agendaService = {
     }
 
     // 3. Payload estrito alinhado com o banco de dados (Snake Case)
+    // GARANTIA: Mapeamento da coluna 'type'
     const dbPayload = {
       patient_id: appointment.patientId,
       patient_name: appointment.patientName,          // Coluna: patient_name
-      patient_phone: appointment.patientPhone || '',  // Coluna: patient_phone (evita null)
+      patient_phone: appointment.patientPhone || '',  // Coluna: patient_phone
       date_time: appointment.dateTime,
-      type: appointment.type,
+      type: appointment.type,                         // Coluna: type (explicitamente mapeada)
       status: appointment.status,
-      notes: appointment.notes || ''                  // Coluna: notes (evita null)
+      notes: appointment.notes || ''                  // Coluna: notes
     };
 
     const { data, error } = await supabase

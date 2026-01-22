@@ -1,5 +1,10 @@
 import { supabase } from '../lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { User, Role, SystemSettings, IntegrationSettings } from '../types';
+
+// Credenciais duplicadas para criação de cliente temporário (evita logout do admin)
+const supabaseUrl = 'https://seporcnzpysaniisprin.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlcG9yY256cHlzYW5paXNwcmluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4ODU0NjgsImV4cCI6MjA4NDQ2MTQ2OH0.uSZHjCzL8K4jp3EFF04YydcI0SpLdgBjQWEWP_xNn_w';
 
 const DEFAULT_SETTINGS: SystemSettings = {
   howToInstallVideoUrl: '',
@@ -128,12 +133,21 @@ export const authService = {
     }));
   },
 
-  // FLUXO DE CRIAÇÃO CORRIGIDO (SEQUENCIAL)
+  // FLUXO DE CRIAÇÃO CORRIGIDO (SEQUENCIAL + CLIENTE TEMPORÁRIO)
   createUser: async (userData: Partial<User>, password?: string): Promise<void> => {
+    // 0. Cria um cliente temporário para não deslogar o Admin atual
+    const tempSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false, // IMPORTANTE: Não salva sessão no LocalStorage
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    });
+
+    console.log("Iniciando criação sequencial de usuário...");
+
     // 1. PRIMEIRO: Criar no Auth Provider para gerar o UID
-    // O 'admin.createUser' só funciona com service_role key no backend. 
-    // No frontend, usamos 'signUp' que retorna o mesmo objeto User com ID.
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await tempSupabase.auth.signUp({
       email: userData.email!,
       password: password || '123456', 
       options: {
@@ -144,16 +158,20 @@ export const authService = {
     });
 
     if (authError) {
+      console.error("Auth Error:", authError);
       throw new Error(`Erro na etapa de Autenticação: ${authError.message}`);
     }
 
     if (!authData.user || !authData.user.id) {
-      throw new Error("Falha crítica: UID não gerado pelo provedor de identidade.");
+      throw new Error("Falha crítica: UID não gerado pelo provedor de identidade. Verifique se o e-mail já existe.");
     }
 
     const userId = authData.user.id;
+    console.log("Usuário Auth criado com ID:", userId);
 
     // 2. SEGUNDO: Inserir na tabela 'profiles' usando o UID gerado
+    // Usamos o cliente principal (supabase) pois ele tem a sessão do Admin logado, 
+    // permitindo insert se as políticas RLS permitirem.
     const { error: profileError } = await supabase.from('profiles').insert([{
       id: userId, // Vinculação obrigatória da Foreign Key
       email: userData.email,
@@ -168,8 +186,12 @@ export const authService = {
 
     if (profileError) {
       console.error("Erro ao criar perfil:", profileError);
-      throw new Error(`Erro ao salvar perfil no banco: ${profileError.message}`);
+      // Tenta rollback manual (opcional, mas recomendado)
+      // await supabase.auth.admin.deleteUser(userId); // Só funciona com service role
+      throw new Error(`Erro ao salvar perfil no banco (Foreign Key/RLS): ${profileError.message}`);
     }
+    
+    console.log("Perfil vinculado com sucesso.");
   },
 
   updateUser: async (user: User): Promise<void> => {
@@ -189,7 +211,6 @@ export const authService = {
 
   deleteUser: async (id: string): Promise<void> => {
     // Nota: Deletar do 'profiles' não deleta do 'auth.users' sem trigger/cascade.
-    // Em um ambiente Admin real, chamariamos uma Edge Function.
     const { error } = await supabase
       .from('profiles')
       .delete()

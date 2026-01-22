@@ -139,20 +139,42 @@ export const authService = {
   },
 
   createUser: async (userData: Partial<User>): Promise<void> => {
-    const fakeId = generateId(); 
-    
-    const { error } = await supabase.from('profiles').insert([{
-      id: fakeId,
+    // PASSO A: Criar usuário no Auth (signUp gera o ID válido no backend)
+    // Nota: Usamos signUp no cliente. 'auth.admin.createUser' exigiria Service Role Key (backend).
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: userData.email!,
+      password: '123456', // Senha Padrão
+      options: {
+        data: {
+          name: userData.name // Metadata
+        }
+      }
+    });
+
+    if (authError) throw new Error("Erro no Auth (SignUp): " + authError.message);
+    if (!authData.user) throw new Error("Erro: Usuário não criado no Auth.");
+
+    // PASSO B: Recuperar ID gerado pelo Supabase
+    const userId = authData.user.id;
+
+    // PASSO C: Insert na Profiles usando ID válido (Resolve profiles_id_fkey)
+    const { error: profileError } = await supabase.from('profiles').insert([{
+      id: userId, // Vínculo FK Obrigatório
       email: userData.email,
       name: userData.name,
-      role: userData.role || 'SUBSCRIBER',
+      // Padronização MAIÚSCULA OBRIGATÓRIA
+      role: (userData.role || 'SUBSCRIBER').toUpperCase(),
+      subscription_status: (userData.subscriptionStatus || 'ACTIVE').toUpperCase(),
       cpf: userData.cpf,
       eduzz_id: userData.eduzzId,
-      subscription_status: userData.subscriptionStatus?.toUpperCase() || 'ACTIVE', // Gravação UPPERCASE
       created_at: new Date().toISOString()
     }]);
 
-    if (error) throw new Error(error.message);
+    if (profileError) {
+      // Se falhar o profile, idealmente deveríamos limpar o auth user, mas deixaremos o log
+      console.error("Erro ao criar perfil:", profileError);
+      throw new Error("Erro ao criar perfil no banco: " + profileError.message);
+    }
   },
 
   updateUser: async (user: User): Promise<void> => {
@@ -163,7 +185,7 @@ export const authService = {
         role: user.role,
         cpf: user.cpf,
         eduzz_id: user.eduzzId,
-        subscription_status: user.subscriptionStatus?.toUpperCase() // Gravação UPPERCASE
+        subscription_status: user.subscriptionStatus?.toUpperCase() // Garante gravação em UPPERCASE
       })
       .eq('id', user.id);
 

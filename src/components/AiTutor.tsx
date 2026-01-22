@@ -24,13 +24,29 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   const [hasInitialized, setHasInitialized] = useState(false);
 
   // Acesso seguro à chave API (Prioridade: Settings do Banco > Env Var)
-  // Agora é estritamente assíncrono para garantir que a Promise resolve
+  // Agora com LOGS DE DIAGNÓSTICO
   const getApiKey = async () => {
     try {
+      console.log("🔍 [Tutor IA] Buscando configurações de integração...");
       const settings = await authService.getIntegrationSettings();
-      if (settings.gemini?.apiKey) return settings.gemini.apiKey;
-      return import.meta.env.VITE_GEMINI_API_KEY || '';
+      
+      if (settings.gemini?.apiKey && settings.gemini.apiKey.length > 5) {
+        console.log("✅ [Tutor IA] Chave encontrada no Banco de Dados.");
+        return settings.gemini.apiKey;
+      } else {
+        console.warn("⚠️ [Tutor IA] Chave NÃO encontrada no Banco (ou está vazia).");
+      }
+
+      const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (envKey) {
+        console.log("✅ [Tutor IA] Chave encontrada no .env (Fallback).");
+        return envKey;
+      }
+
+      console.error("❌ [Tutor IA] Nenhuma chave API encontrada em lugar nenhum.");
+      return '';
     } catch (e) {
+      console.error("❌ [Tutor IA] Erro de conexão ao buscar settings:", e);
       return '';
     }
   };
@@ -52,7 +68,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
     // Await crucial aqui
     const apiKey = await getApiKey();
     if (!apiKey) {
-      setMessages([{ role: 'model', text: 'Chave API não encontrada. Configure no Painel Admin (Integrações) ou no arquivo .env.' }]);
+      setMessages([{ role: 'model', text: 'ERRO DE CONFIGURAÇÃO: Chave API do Google Gemini não encontrada. Por favor, vá em "Integrações" no Painel Admin e configure sua chave.' }]);
       return;
     }
 
@@ -89,19 +105,25 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       
       setMessages(prev => [...prev, { role: 'model', text }]);
     } catch (err: any) {
-      console.error("Erro Detalhado Gemini (Init):", err);
-      setMessages(prev => [...prev, { role: 'model', text: "Erro ao iniciar o Tutor. Verifique a conexão ou a API Key." }]);
+      // DIAGNÓSTICO CIRÚRGICO DO ERRO
+      console.error("🛑 [Tutor IA] ERRO CRÍTICO NA INICIALIZAÇÃO:", err);
+      
+      let errorMsg = "Erro ao iniciar o Tutor. Verifique a conexão ou a API Key.";
+      
+      if (err.message?.includes('API_KEY_INVALID')) errorMsg = "Erro: A Chave API configurada é inválida ou expirou.";
+      if (err.message?.includes('fetch failed')) errorMsg = "Erro de Conexão: Verifique sua internet ou bloqueadores de anúncio.";
+      
+      setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const sendMessageToGemini = async (text: string) => {
-    // Await crucial aqui
     const apiKey = await getApiKey();
     
     if (!apiKey) {
-      setMessages(prev => [...prev, { role: 'model', text: "Chave API não encontrada." }]);
+      setMessages(prev => [...prev, { role: 'model', text: "Chave API perdida. Recarregue a página." }]);
       return;
     }
 
@@ -131,8 +153,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);
       }
     } catch (err: any) {
-      console.error("Erro Detalhado Gemini:", err);
-      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação." }]);
+      console.error("🛑 [Tutor IA] ERRO NO ENVIO:", err);
+      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação. Verifique o console." }]);
     } finally {
       setIsLoading(false);
     }

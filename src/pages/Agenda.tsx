@@ -5,16 +5,16 @@ import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { agendaService } from '../services/agendaService';
 import { useCreateAppointment } from '../services/appointmentService';
-import { authService } from '../services/authService';
+import { authService } from '../services/authService'; // Usado para buscar a lista de usuários/pacientes
 import { Appointment, User as AppUser } from '../types'; 
 import { useToast } from '../contexts/ToastContext';
 
 export const Agenda: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patients, setPatients] = useState<AppUser[]>([]);
+  const [patients, setPatients] = useState<AppUser[]>([]); // Lista para o Dropdown
   const { addToast } = useToast();
   
-  // HOOK DE CRIAÇÃO BLINDADO
+  // HOOK DE CRIAÇÃO BLINDADO (Soft Constraint Logic)
   const { createAppointment, loading: isCreating } = useCreateAppointment();
 
   // Modal State
@@ -37,6 +37,7 @@ export const Agenda: React.FC = () => {
 
   const loadAndSanitizeData = async () => {
     try {
+      // 1. Carrega Agendamentos
       const rawAppts = await agendaService.getAll();
       const safeAppts = Array.isArray(rawAppts) ? rawAppts : [];
       
@@ -48,6 +49,10 @@ export const Agenda: React.FC = () => {
 
       setAppointments(validAppts);
       
+      // 2. Carrega Lista de Assinantes/Alunos para o Dropdown
+      // Usamos authService.getSubscribers() ou patientService.getAll() dependendo da regra de negócio.
+      // Assumindo que agendamos para "Assinantes" (Profiles) ou "Pacientes" da tabela patients.
+      // O código anterior usava authService.getSubscribers(), mantendo para consistência.
       const subs = await authService.getSubscribers();
       setPatients(Array.isArray(subs) ? subs : []);
     } catch (e) {
@@ -60,12 +65,19 @@ export const Agenda: React.FC = () => {
     const selectedId = e.target.value;
     
     if (!selectedId) {
-       setFormData(prev => ({ ...prev, patientId: '' }));
+       // Se selecionou "Cadastro Manual", limpa o ID mas permite digitar o nome
+       setFormData(prev => ({ 
+         ...prev, 
+         patientId: '',
+         patientName: '',
+         patientPhone: ''
+       }));
        return;
     }
 
     const patient = patients.find(p => p.id === selectedId);
     if (patient) {
+       // Auto-preenche os dados
        const phone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
        setFormData(prev => ({
          ...prev,
@@ -79,58 +91,93 @@ export const Agenda: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validação foca no Nome (Obrigatório)
-    if (!formData.patientName) {
+    // 1. Sanitização dos Inputs
+    const cleanName = formData.patientName.trim();
+    const cleanPhone = formData.patientPhone.trim();
+    const cleanNotes = formData.notes.trim();
+
+    // 2. Validações Básicas
+    if (!cleanName) {
         addToast('O nome do aluno é obrigatório.', 'warning');
         return;
     }
-
     if (!formData.type) {
         addToast('O tipo de sessão é obrigatório.', 'warning');
         return;
     }
-
     if (!formData.date || !formData.time) {
         addToast('Data e horário são obrigatórios.', 'warning');
         return;
     }
 
+    // 3. Verificação de Integridade do ID (Safety Net)
+    // Se temos um ID, verificamos se ele ainda existe na lista carregada.
+    // Se não existir (ex: usuário deletado recentemente), forçamos null para evitar erro de FK.
+    let finalPatientId: string | null = formData.patientId;
+    
+    if (finalPatientId) {
+      const exists = patients.some(p => p.id === finalPatientId);
+      if (!exists) {
+        console.warn('ID selecionado não encontrado na lista atual. Convertendo para agendamento manual.');
+        finalPatientId = null;
+      }
+    }
+    // Garante que string vazia vire null
+    if (finalPatientId === '') finalPatientId = null;
+
     try {
-      // SOFT CONSTRAINT IMPLEMENTADA
-      // Envia ID apenas se existir, senão envia null. Nome e Telefone vão como texto.
+      // 4. Chamada ao Serviço via Hook
       await createAppointment({
-        patientId: formData.patientId || null,
-        patientName: formData.patientName.trim(), // Sanitização
-        patientPhone: formData.patientPhone.trim(), // Sanitização
+        patientId: finalPatientId, // Pode ser null (Soft Constraint)
+        patientName: cleanName,    // Obrigatório (Denormalizado)
+        patientPhone: cleanPhone,  // Opcional (Denormalizado)
         dateTime: `${formData.date}T${formData.time}:00`,
         type: formData.type,
-        notes: formData.notes
+        notes: cleanNotes
       });
       
+      // 5. Reset e Recarga
       setIsModalOpen(false);
-      setFormData({ patientId: '', patientName: '', patientPhone: '', date: '', time: '', type: 'Avaliação Inicial', notes: '' });
+      setFormData({ 
+        patientId: '', 
+        patientName: '', 
+        patientPhone: '', 
+        date: '', 
+        time: '', 
+        type: 'Avaliação Inicial', 
+        notes: '' 
+      });
       loadAndSanitizeData();
       addToast('Agendamento realizado com sucesso!', 'success');
     } catch (error: any) {
       console.error(error);
-      addToast(error.message || 'Erro ao criar agendamento', 'warning');
+      addToast(error.message || 'Erro ao criar agendamento', 'error');
     }
   };
 
   const handleStatusChange = async (id: string, newStatus: Appointment['status']) => {
-    await agendaService.updateStatus(id, newStatus);
-    loadAndSanitizeData();
-    addToast('Status atualizado.', 'info');
+    try {
+      await agendaService.updateStatus(id, newStatus);
+      loadAndSanitizeData();
+      addToast('Status atualizado.', 'info');
+    } catch (error) {
+      addToast('Erro ao atualizar status.', 'error');
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Tem certeza que deseja remover este agendamento?')) {
-      await agendaService.delete(id);
-      loadAndSanitizeData();
-      addToast('Agendamento removido.', 'success');
+      try {
+        await agendaService.delete(id);
+        loadAndSanitizeData();
+        addToast('Agendamento removido.', 'success');
+      } catch (error) {
+        addToast('Erro ao remover agendamento.', 'error');
+      }
     }
   };
 
+  // Agrupamento por Data
   const groupedAppointments = appointments.reduce((groups, appt) => {
     try {
       const dateKey = appt.dateTime.split('T')[0];
@@ -170,9 +217,9 @@ export const Agenda: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-            <CalendarIcon className="mr-3 text-gray-700" /> Agenda
+            <CalendarIcon className="mr-3 text-gray-700" /> Agenda Master
           </h1>
-          <p className="text-gray-600 mt-1">Organize seus atendimentos e veja pendências de avaliação.</p>
+          <p className="text-gray-600 mt-1">Controle total de atendimentos e avaliações.</p>
         </div>
         <Button onClick={() => setIsModalOpen(true)} variant="blue">
           <Plus size={20} className="mr-2" /> Novo Agendamento
@@ -185,7 +232,7 @@ export const Agenda: React.FC = () => {
             <CalendarIcon size={32} />
           </div>
           <h3 className="text-lg font-medium text-gray-900">Agenda Vazia</h3>
-          <p className="text-gray-500 max-w-sm mx-auto mt-1 mb-6">Nenhum compromisso agendado.</p>
+          <p className="text-gray-500 max-w-sm mx-auto mt-1 mb-6">Nenhum compromisso agendado para os próximos dias.</p>
           <Button onClick={() => setIsModalOpen(true)} variant="outline">
             Agendar Agora
           </Button>
@@ -205,8 +252,6 @@ export const Agenda: React.FC = () => {
                 </h3>
                 <div className="space-y-4">
                   {groupedAppointments[dateKey]?.map(appt => {
-                    const isEval = appt.type.includes('Avaliação');
-                    
                     return (
                       <div key={appt.id} className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm hover:shadow-md transition-all relative group">
                         <div className="flex flex-col sm:flex-row justify-between gap-4">
@@ -285,12 +330,12 @@ export const Agenda: React.FC = () => {
                   value={formData.patientId}
                   onChange={handlePatientSelect}
                 >
-                  <option value="">-- Cadastro Manual --</option>
+                  <option value="">-- Cadastro Manual / Visitante --</option>
                   {patients.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">Selecione para auto-preencher ou deixe vazio para digitar.</p>
+                <p className="text-xs text-gray-500 mt-1">Selecione para auto-preencher ou deixe vazio para digitar manualmente.</p>
              </div>
 
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -349,7 +394,7 @@ export const Agenda: React.FC = () => {
 
           <div className="bg-yellow-50 p-3 rounded-lg flex items-start text-xs text-yellow-800">
             <AlertCircle size={14} className="mr-2 mt-0.5 flex-shrink-0" />
-            O sistema bloqueará automaticamente horários com intervalo menor que 1h entre atendimentos.
+            O sistema bloqueará automaticamente horários com intervalo menor que 1h.
           </div>
 
           <div className="flex justify-end pt-4">

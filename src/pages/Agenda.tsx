@@ -14,13 +14,13 @@ export const Agenda: React.FC = () => {
   const [patients, setPatients] = useState<AppUser[]>([]);
   const { addToast } = useToast();
   
-  // Hook de criação blindado
+  // HOOK DE CRIAÇÃO BLINDADO (Soft Constraint Logic)
   const { createAppointment, loading: isCreating } = useCreateAppointment();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Form State expandido para suportar entrada manual (Soft Constraint)
+  // Form State expandido para suportar entrada manual
   const [formData, setFormData] = useState({
     patientId: '',
     patientName: '',
@@ -97,7 +97,8 @@ export const Agenda: React.FC = () => {
     }
 
     try {
-      // Smart Link: Envia ID apenas se existir, senão envia null para evitar FK Error
+      // SMART LINK: Envia ID apenas se existir, senão envia null para evitar FK Error
+      // Toda a lógica de inserção agora reside no useCreateAppointment -> appointmentService
       await createAppointment({
         patientId: formData.patientId || null,
         patientName: formData.patientName,
@@ -113,6 +114,7 @@ export const Agenda: React.FC = () => {
       addToast('Agendamento realizado com sucesso!', 'success');
     } catch (error: any) {
       console.error(error);
+      // Feedback visual de erro vindo do serviço
       addToast(error.message || 'Erro ao criar agendamento', 'warning');
     }
   };

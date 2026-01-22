@@ -13,7 +13,7 @@ export const Subscribers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const { addToast } = useToast();
   
-  // Hook do novo serviço de criação blindado
+  // HOOK DE CRIAÇÃO BLINDADO (Auth + Profile + Rollback)
   const { createSubscriber, loading: isCreating } = useCreateSubscriber();
   
   // Modal State
@@ -38,7 +38,6 @@ export const Subscribers: React.FC = () => {
 
   const loadUsers = async () => {
     try {
-      // Mantemos o authService para leitura (listagem)
       const data = await authService.getSubscribers();
       if (Array.isArray(data)) {
         setUsers(data);
@@ -89,7 +88,7 @@ export const Subscribers: React.FC = () => {
 
     try {
       if (editingUser) {
-        // Atualização usando o novo subscriberService
+        // ATUALIZAÇÃO: Usa o serviço direto (sem hook de criação)
         const updateData = {
           ...editingUser,
           name: formData.name,
@@ -100,7 +99,8 @@ export const Subscribers: React.FC = () => {
         await subscriberService.updateSubscriber(updateData);
         addToast('Assinante atualizado com sucesso!', 'success');
       } else {
-        // Criação usando o Hook Blindado (Auth + Profile + Rollback)
+        // CRIAÇÃO: Usa o Hook useCreateSubscriber
+        // Validação básica de senha
         if (!formData.password || formData.password.length < 6) {
            addToast('A senha é obrigatória e deve ter pelo menos 6 caracteres.', 'warning');
            setIsLoading(false);
@@ -120,7 +120,9 @@ export const Subscribers: React.FC = () => {
       setIsModalOpen(false);
       loadUsers(); 
     } catch (error: any) {
-      addToast(error.message, 'error');
+      // Feedback Visual de Erro vindo do Serviço
+      const msg = error.message || 'Erro ao processar solicitação.';
+      addToast(msg, 'error');
     } finally {
       setIsLoading(false);
     }

@@ -86,7 +86,7 @@ export const Subscribers: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Sanitização no Frontend (Camada 1 de Proteção)
+    // Sanitização no Frontend
     const safeEmail = formData.email.trim().toLowerCase();
     const safeName = formData.name.trim();
 
@@ -110,7 +110,7 @@ export const Subscribers: React.FC = () => {
            return;
         }
 
-        // Chama o hook blindado com dados limpos
+        // Chama o hook blindado - NENHUM ID É GERADO AQUI
         await createSubscriber({
           name: safeName,
           email: safeEmail,
@@ -122,7 +122,8 @@ export const Subscribers: React.FC = () => {
         addToast('Novo assinante criado e vinculado com sucesso!', 'success');
       }
       setIsModalOpen(false);
-      loadUsers(); 
+      // Pequeno delay para garantir que o banco atualizou antes de recarregar
+      setTimeout(loadUsers, 500);
     } catch (error: any) {
       const msg = error.message || 'Erro ao processar solicitação.';
       addToast(msg, 'error');

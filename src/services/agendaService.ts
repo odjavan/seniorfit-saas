@@ -27,12 +27,15 @@ export const agendaService = {
   },
 
   create: async (appointment: Omit<Appointment, 'id'>): Promise<Appointment> => {
-    // 1. Validação de Segurança para evitar Erro 400
+    // 1. Validações Básicas
     if (!appointment.patientName) {
-      throw new Error("O nome do aluno é obrigatório para o agendamento.");
+      throw new Error("O nome do aluno é obrigatório.");
+    }
+    if (!appointment.patientId) {
+      throw new Error("O ID do aluno é obrigatório.");
     }
 
-    // 2. Verificação de conflito básica
+    // 2. Verificação de conflito de horário (opcional, mantendo lógica existente)
     const { data: existing } = await supabase
       .from('appointments')
       .select('date_time')
@@ -45,7 +48,7 @@ export const agendaService = {
       const hasConflict = existing.some(appt => {
         const existingTime = new Date(appt.date_time).getTime();
         const diffMinutes = Math.abs(existingTime - newTime) / (1000 * 60);
-        return diffMinutes < 60;
+        return diffMinutes < 60; // Bloqueia conflitos de 1h
       });
 
       if (hasConflict) {
@@ -53,16 +56,15 @@ export const agendaService = {
       }
     }
 
-    // 3. Payload estrito alinhado com o banco de dados (Snake Case)
-    // GARANTIA: Mapeamento da coluna 'type'
+    // 3. Payload "Mirror Operation": Envio direto e explícito para as colunas
     const dbPayload = {
-      patient_id: appointment.patientId,
-      patient_name: appointment.patientName,          // Coluna: patient_name
-      patient_phone: appointment.patientPhone || '',  // Coluna: patient_phone
+      patient_id: appointment.patientId,      // FK Obrigatória
+      patient_name: appointment.patientName,  // Denormalizado (Explicitamente solicitado)
+      patient_phone: appointment.patientPhone || '', // Denormalizado
       date_time: appointment.dateTime,
-      type: appointment.type,                         // Coluna: type (explicitamente mapeada)
+      type: appointment.type,                 // Coluna type
       status: appointment.status,
-      notes: appointment.notes || ''                  // Coluna: notes
+      notes: appointment.notes || ''
     };
 
     const { data, error } = await supabase
@@ -72,7 +74,7 @@ export const agendaService = {
       .single();
 
     if (error) {
-      console.error("Supabase Create Error:", error);
+      console.error("Supabase Agenda Insert Error:", error);
       throw new Error(error.message);
     }
 

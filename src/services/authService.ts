@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { User, Role, SystemSettings, IntegrationSettings } from '../types';
 
-// Credenciais duplicadas para criação de cliente temporário (evita logout do admin)
+// Credenciais para o cliente temporário (mesmas do lib/supabase.ts)
 const supabaseUrl = 'https://seporcnzpysaniisprin.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlcG9yY256cHlzYW5paXNwcmluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4ODU0NjgsImV4cCI6MjA4NDQ2MTQ2OH0.uSZHjCzL8K4jp3EFF04YydcI0SpLdgBjQWEWP_xNn_w';
 
@@ -133,65 +133,66 @@ export const authService = {
     }));
   },
 
-  // FLUXO DE CRIAÇÃO CORRIGIDO (SEQUENCIAL + CLIENTE TEMPORÁRIO)
+  // --- CRIAÇÃO DE USUÁRIO (OPERAÇÃO BLINDADA) ---
   createUser: async (userData: Partial<User>, password?: string): Promise<void> => {
-    // 0. Cria um cliente temporário para não deslogar o Admin atual
+    console.log("Iniciando criação de usuário...");
+
+    // 1. Cria um Cliente Supabase Temporário
+    // Isso é CRUCIAL para criar um novo usuário sem deslogar o Admin atual.
+    // Usamos persistSession: false para que este cliente não interfira no localStorage.
     const tempSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        persistSession: false, // IMPORTANTE: Não salva sessão no LocalStorage
+        persistSession: false,
         autoRefreshToken: false,
         detectSessionInUrl: false
       }
     });
 
-    console.log("Iniciando criação sequencial de usuário...");
-
-    // 1. PRIMEIRO: Criar no Auth Provider para gerar o UID
+    // 2. Cria o Auth User (Retorna o UID real)
     const { data: authData, error: authError } = await tempSupabase.auth.signUp({
       email: userData.email!,
-      password: password || '123456', 
+      password: password || '123456',
       options: {
         data: {
-          name: userData.name // Metadados úteis para o Auth
+          name: userData.name // Metadados para o Auth
         }
       }
     });
 
     if (authError) {
-      console.error("Auth Error:", authError);
-      throw new Error(`Erro na etapa de Autenticação: ${authError.message}`);
+      // Tratamento para erro comum "User already registered"
+      if (authError.message.includes('already registered')) {
+         throw new Error('Este e-mail já está cadastrado no sistema de autenticação.');
+      }
+      throw new Error(`Erro no Auth: ${authError.message}`);
     }
 
     if (!authData.user || !authData.user.id) {
-      throw new Error("Falha crítica: UID não gerado pelo provedor de identidade. Verifique se o e-mail já existe.");
+      throw new Error("Falha crítica: UID não gerado pelo provedor de identidade.");
     }
 
-    const userId = authData.user.id;
-    console.log("Usuário Auth criado com ID:", userId);
+    const realUserId = authData.user.id;
+    console.log("UID Gerado:", realUserId);
 
-    // 2. SEGUNDO: Inserir na tabela 'profiles' usando o UID gerado
-    // Usamos o cliente principal (supabase) pois ele tem a sessão do Admin logado, 
-    // permitindo insert se as políticas RLS permitirem.
+    // 3. Insere na tabela 'profiles' usando o ID REAL
+    // Aqui usamos o cliente 'supabase' principal (do Admin) para ter permissão de escrita.
     const { error: profileError } = await supabase.from('profiles').insert([{
-      id: userId, // Vinculação obrigatória da Foreign Key
+      id: realUserId, // A CHAVE DO SUCESSO: Usar o ID retornado pelo Auth
       email: userData.email,
       name: userData.name,
-      // Padronização rigorosa (Upper Case conforme solicitado)
-      role: 'SUBSCRIBER', 
-      subscription_status: 'ACTIVE',
+      role: 'SUBSCRIBER', // Padronizado
+      subscription_status: 'ACTIVE', // Padronizado
       cpf: userData.cpf || null,
       eduzz_id: userData.eduzzId || null,
       created_at: new Date().toISOString()
     }]);
 
     if (profileError) {
-      console.error("Erro ao criar perfil:", profileError);
-      // Tenta rollback manual (opcional, mas recomendado)
-      // await supabase.auth.admin.deleteUser(userId); // Só funciona com service role
-      throw new Error(`Erro ao salvar perfil no banco (Foreign Key/RLS): ${profileError.message}`);
+      console.error("Erro no Profile Insert:", profileError);
+      throw new Error(`Erro ao salvar perfil (FK Constraint): ${profileError.message}`);
     }
-    
-    console.log("Perfil vinculado com sucesso.");
+
+    console.log("Usuário e Perfil criados com sucesso.");
   },
 
   updateUser: async (user: User): Promise<void> => {

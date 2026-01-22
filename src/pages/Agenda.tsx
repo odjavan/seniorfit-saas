@@ -40,6 +40,7 @@ export const Agenda: React.FC = () => {
 
       setAppointments(validAppts);
       
+      // Carrega lista de assinantes (que funcionam como "Alunos" aqui)
       const subs = await authService.getSubscribers();
       setPatients(Array.isArray(subs) ? subs : []);
     } catch (e) {
@@ -51,11 +52,11 @@ export const Agenda: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Busca o objeto completo do usuário/paciente para extrair o nome
+    // Busca o objeto completo do usuário/paciente para extrair nome e telefone
     const patient = patients.find(p => p.id === formData.patientId);
     
     if (!patient) {
-        addToast('Selecione um aluno válido.', 'warning');
+        addToast('Selecione um aluno válido da lista.', 'warning');
         return;
     }
 
@@ -66,16 +67,15 @@ export const Agenda: React.FC = () => {
     }
 
     try {
-      // Extração robusta do telefone
+      // Extração de dados para enviar explicitamente (Mirror Operation)
       const patientPhone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
-
+      
       await agendaService.create({
-        patientId: patient.id,
-        patientName: patient.name, 
-        patientPhone: patientPhone,
-        // Adiciona :00 para garantir formato ISO correto para timestamp (HH:mm:ss)
+        patientId: patient.id, // ID Real (Foreign Key)
+        patientName: patient.name, // Nome explícito
+        patientPhone: patientPhone, // Telefone explícito
         dateTime: `${formData.date}T${formData.time}:00`,
-        type: formData.type, // Garante envio do tipo selecionado
+        type: formData.type, // Tipo explícito
         status: 'Agendado',
         notes: formData.notes
       });
@@ -102,10 +102,6 @@ export const Agenda: React.FC = () => {
       loadAndSanitizeData();
       addToast('Agendamento removido.', 'success');
     }
-  };
-
-  const getPendingTests = (patientId: string) => {
-    return [];
   };
 
   const groupedAppointments = appointments.reduce((groups, appt) => {
@@ -182,7 +178,6 @@ export const Agenda: React.FC = () => {
                 </h3>
                 <div className="space-y-4">
                   {groupedAppointments[dateKey]?.map(appt => {
-                    const pendingTests = getPendingTests(appt.patientId);
                     const isEval = appt.type.includes('Avaliação');
                     
                     return (
@@ -212,16 +207,6 @@ export const Agenda: React.FC = () => {
                                  )}
                                </div>
                                <p className="text-sm text-gray-600 font-medium">{appt.type}</p>
-                               
-                               {isEval && pendingTests.length > 0 && appt.status !== 'Concluído' && (
-                                 <div className="mt-2 flex items-start gap-1.5 text-xs text-orange-700 bg-orange-50 p-2 rounded-md border border-orange-100 max-w-sm">
-                                   <ClipboardList size={14} className="mt-0.5 shrink-0" />
-                                   <span>
-                                     <strong>Pendente:</strong> {pendingTests.slice(0, 5).join(', ')}
-                                     {pendingTests.length > 5 && '...'}
-                                   </span>
-                                 </div>
-                               )}
 
                                {appt.notes && <p className="text-xs text-gray-400 mt-2 italic">"{appt.notes}"</p>}
                             </div>

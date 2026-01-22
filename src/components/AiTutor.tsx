@@ -75,7 +75,9 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
     setIsLoading(true);
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      // CORREÇÃO: Modelo alterado para gemini-pro (v1 compatível)
+      // gemini-1.5-flash requer SDK mais recente ou endpoint v1beta
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
       const context = `
         PACIENTE ATUAL:
@@ -112,6 +114,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       
       if (err.message?.includes('API_KEY_INVALID')) errorMsg = "Erro: A Chave API configurada é inválida ou expirou.";
       if (err.message?.includes('fetch failed')) errorMsg = "Erro de Conexão: Verifique sua internet ou bloqueadores de anúncio.";
+      if (err.message?.includes('404') || err.message?.includes('not found')) errorMsg = "Erro de Modelo: O sistema tentou acessar uma versão incompatível da IA. O ajuste para 'gemini-pro' deve corrigir.";
       
       setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
     } finally {
@@ -133,7 +136,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
 
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      // CORREÇÃO: Modelo alterado para gemini-pro
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
       
       const systemInstruction = `
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 
@@ -154,7 +158,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       }
     } catch (err: any) {
       console.error("🛑 [Tutor IA] ERRO NO ENVIO:", err);
-      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação. Verifique o console." }]);
+      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação. Verifique o console para detalhes." }]);
     } finally {
       setIsLoading(false);
     }

@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Patient } from '../types';
 import { X, Send, Bot, Sparkles } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { authService } from '../services/authService';
 
 interface AiTutorProps {
   patient: Patient;
@@ -35,11 +35,52 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
     }
   }, [isOpen]);
 
+  // Função robusta para pegar a chave (Banco > Env)
+  const getApiKey = async (): Promise<string> => {
+    try {
+      // 1. Tenta buscar do banco (Settings)
+      const settings = await authService.getIntegrationSettings();
+      if (settings.gemini?.apiKey && settings.gemini.apiKey.length > 5) {
+        return settings.gemini.apiKey.trim();
+      }
+    } catch (e) {
+      console.warn("Falha ao buscar chave no banco, tentando ENV.", e);
+    }
+
+    // 2. Tenta variáveis de ambiente
+    if (process.env.API_KEY) return process.env.API_KEY.trim();
+    if (import.meta.env.VITE_GEMINI_API_KEY) return import.meta.env.VITE_GEMINI_API_KEY.trim();
+
+    return '';
+  };
+
   const initChat = async () => {
     setIsLoading(true);
+    
+    // PASSO CRÍTICO 1: Resolver a chave antes de tudo
+    const apiKey = await getApiKey();
+    
+    // PASSO CRÍTICO 2: Log de diagnóstico
+    console.log('Chave final utilizada:', apiKey ? 'Presente' : 'AUSENTE');
+
+    if (!apiKey) {
+      setMessages([{ 
+        role: 'model', 
+        text: 'ERRO: API Key não configurada. Por favor, vá em "Integrações" no painel e adicione sua chave do Google AI Studio.' 
+      }]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Inicialização segura
+      const genAI = new GoogleGenerativeAI(apiKey);
       
+      // Configuração para V1Beta e Gemini 2.0
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-2.0-flash" 
+      }, { apiVersion: 'v1beta' });
+
       const context = `
         PACIENTE ATUAL:
         Nome: ${patient.name}
@@ -62,21 +103,22 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         ${context}
       `;
       
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: initialPrompt
-      });
-
-      const text = response.text;
+      const result = await model.generateContent(initialPrompt);
+      const response = await result.response;
+      const text = response.text();
+      
       if (text) {
         setMessages(prev => [...prev, { role: 'model', text }]);
       }
     } catch (err: any) {
       console.error("🚨 [Tutor IA] ERRO CRÍTICO:", err);
-      setMessages(prev => [...prev, { 
-        role: 'model', 
-        text: "Desculpe, tive um problema ao analisar os dados. Verifique a configuração da chave de API no ambiente." 
-      }]);
+      
+      let errorMsg = "Desculpe, tive um problema técnico ao conectar com a IA.";
+      if (err.message?.includes('403') || err.message?.includes('API key')) {
+        errorMsg = "Erro de Permissão: Verifique se sua chave API é válida.";
+      }
+
+      setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
     } finally {
       setIsLoading(false);
     }
@@ -86,23 +128,32 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
     setMessages(prev => [...prev, { role: 'user', text }]);
     setIsLoading(true);
 
+    const apiKey = await getApiKey();
+    
+    if (!apiKey) {
+        setMessages(prev => [...prev, { role: 'model', text: "Erro: Chave de API perdida." }]);
+        setIsLoading(false);
+        return;
+    }
+
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-2.0-flash" 
+      }, { apiVersion: 'v1beta' });
       
       const systemInstruction = `
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 
-        Seja técnico e baseie-se no ACSM/NSCA (American College of Sports Medicine / National Strength and Conditioning Association). 
+        Seja técnico e baseie-se no ACSM/NSCA. 
         Você não diagnostica doenças e não faz alterações no sistema.
-        Se o aluno relatar patologias (ex: artrose), cruze com os dados funcionais para sugerir adaptações seguras de treinamento.
-        Responda sempre em Português do Brasil de forma clara e profissional.
+        Se o aluno relatar patologias (ex: artrose), cruze com os dados funcionais para sugerir adaptações seguras.
+        Responda sempre em Português do Brasil.
       `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: `${systemInstruction}\n\nTreinador pergunta: ${text}`
-      });
-
-      const responseText = response.text;
+      const result = await model.generateContent(`${systemInstruction}\n\nTreinador pergunta: ${text}`);
+      const response = await result.response;
+      const responseText = response.text();
+      
       if (responseText) {
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);
       }
@@ -110,7 +161,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       console.error("🚨 [Tutor IA] ERRO NA RESPOSTA:", err);
       setMessages(prev => [...prev, { 
         role: 'model', 
-        text: "Erro ao processar sua pergunta. Por favor, tente novamente em alguns instantes." 
+        text: "Erro ao processar sua pergunta. Tente novamente." 
       }]);
     } finally {
       setIsLoading(false);

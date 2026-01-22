@@ -1,12 +1,11 @@
 import { supabase } from '../lib/supabase';
 import { User, Role, SystemSettings, IntegrationSettings } from '../types';
-import { generateId } from '../utils/generateId';
 
 const DEFAULT_SETTINGS: SystemSettings = {
   howToInstallVideoUrl: '',
 };
 
-// ID Singleton para garantir que só exista uma linha de configuração na tabela nova
+// ID Singleton mantido apenas para escrita (upsert), leitura será genérica
 const SYSTEM_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
 
 export const authService = {
@@ -21,20 +20,18 @@ export const authService = {
     if (authError) throw new Error(authError.message);
     if (!authData.user) throw new Error('Usuário não encontrado.');
 
-    // Busca dados complementares na tabela profiles
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', authData.user.id)
       .single();
 
-    // Fallback caso o profile não exista (primeiro login ou erro de sync)
     if (profileError || !profile) {
       return {
         id: authData.user.id,
         email: authData.user.email!,
         name: 'Usuário',
-        role: 'TRAINER', // Default role
+        role: 'TRAINER',
         createdAt: new Date().toISOString(),
         subscriptionStatus: 'active'
       };
@@ -43,11 +40,9 @@ export const authService = {
     return {
       id: profile.id,
       email: profile.email,
-      name: profile.name, // Garante uso de 'name'
-      // Normalização: Banco (SUBSCRIBER) -> App (SUBSCRIBER)
+      name: profile.name,
       role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
-      // Normalização: Banco (ACTIVE) -> App (active)
       subscriptionStatus: profile.subscription_status?.toLowerCase(),
       cpf: profile.cpf,
       eduzzId: profile.eduzz_id
@@ -74,11 +69,9 @@ export const authService = {
     return {
       id: profile.id,
       email: profile.email,
-      name: profile.name, // Garante uso de 'name'
-      // Normalização: Banco (SUBSCRIBER) -> App (SUBSCRIBER)
+      name: profile.name,
       role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
-      // Normalização: Banco (ACTIVE) -> App (active)
       subscriptionStatus: profile.subscription_status?.toLowerCase(),
       cpf: profile.cpf,
       eduzzId: profile.eduzz_id
@@ -87,7 +80,6 @@ export const authService = {
 
   // --- User Management (Admin) ---
 
-  // Método genérico para Admin (traz todos)
   getAllUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase
       .from('profiles')
@@ -102,7 +94,7 @@ export const authService = {
     return data.map((profile: any) => ({
       id: profile.id,
       email: profile.email,
-      name: profile.name, // Correção: name
+      name: profile.name,
       role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
       subscriptionStatus: profile.subscription_status?.toLowerCase(),
@@ -112,12 +104,11 @@ export const authService = {
     }));
   },
 
-  // Método ESPECÍFICO para Assinantes (Filtro Rígido)
   getSubscribers: async (): Promise<User[]> => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('role', 'SUBSCRIBER') // FILTRO MAIÚSCULO OBRIGATÓRIO
+      .eq('role', 'SUBSCRIBER')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -128,10 +119,10 @@ export const authService = {
     return data.map((profile: any) => ({
       id: profile.id,
       email: profile.email,
-      name: profile.name, // Correção: name
+      name: profile.name,
       role: 'SUBSCRIBER',
       createdAt: profile.created_at,
-      subscriptionStatus: profile.subscription_status?.toLowerCase(), // Normaliza para Badge
+      subscriptionStatus: profile.subscription_status?.toLowerCase(),
       cpf: profile.cpf,
       eduzzId: profile.eduzz_id,
       lastPaymentDate: profile.last_payment_date
@@ -139,14 +130,12 @@ export const authService = {
   },
 
   createUser: async (userData: Partial<User>): Promise<void> => {
-    // PASSO A: Criar usuário no Auth (signUp gera o ID válido no backend)
-    // Nota: Usamos signUp no cliente. 'auth.admin.createUser' exigiria Service Role Key (backend).
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email!,
-      password: '123456', // Senha Padrão
+      password: '123456',
       options: {
         data: {
-          name: userData.name // Metadata
+          name: userData.name
         }
       }
     });
@@ -154,15 +143,12 @@ export const authService = {
     if (authError) throw new Error("Erro no Auth (SignUp): " + authError.message);
     if (!authData.user) throw new Error("Erro: Usuário não criado no Auth.");
 
-    // PASSO B: Recuperar ID gerado pelo Supabase
     const userId = authData.user.id;
 
-    // PASSO C: Insert na Profiles usando ID válido (Resolve profiles_id_fkey)
     const { error: profileError } = await supabase.from('profiles').insert([{
-      id: userId, // Vínculo FK Obrigatório
+      id: userId,
       email: userData.email,
       name: userData.name,
-      // Padronização MAIÚSCULA OBRIGATÓRIA
       role: (userData.role || 'SUBSCRIBER').toUpperCase(),
       subscription_status: (userData.subscriptionStatus || 'ACTIVE').toUpperCase(),
       cpf: userData.cpf,
@@ -171,7 +157,6 @@ export const authService = {
     }]);
 
     if (profileError) {
-      // Se falhar o profile, idealmente deveríamos limpar o auth user, mas deixaremos o log
       console.error("Erro ao criar perfil:", profileError);
       throw new Error("Erro ao criar perfil no banco: " + profileError.message);
     }
@@ -185,7 +170,7 @@ export const authService = {
         role: user.role,
         cpf: user.cpf,
         eduzz_id: user.eduzzId,
-        subscription_status: user.subscriptionStatus?.toUpperCase() // Garante gravação em UPPERCASE
+        subscription_status: user.subscriptionStatus?.toUpperCase()
       })
       .eq('id', user.id);
 
@@ -205,7 +190,6 @@ export const authService = {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // CORREÇÃO CRÍTICA: Busca por 'SUBSCRIBER' em MAIÚSCULO
     const { count, error } = await supabase
       .from('profiles')
       .select('*', { count: 'exact', head: true })
@@ -216,14 +200,15 @@ export const authService = {
     return count || 0;
   },
 
-  // --- System Settings (Admin Panel - Video URL) ---
+  // --- System Settings ---
 
   getSettings: async (): Promise<SystemSettings> => {
     try {
+      // CORREÇÃO: Busca a primeira linha disponível sem filtrar por ID fixo
       const { data } = await supabase
         .from('system_settings')
         .select('video_url')
-        .eq('id', SYSTEM_SETTINGS_ID)
+        .limit(1)
         .single();
         
       if (data && data.video_url) {
@@ -244,13 +229,14 @@ export const authService = {
     if (error) throw new Error(error.message);
   },
 
-  // --- Integrations (Admin Panel - API Keys) ---
+  // --- Integrations ---
 
   getIntegrationSettings: async (): Promise<IntegrationSettings> => {
+    // CORREÇÃO: Removemos .eq('id', SYSTEM_SETTINGS_ID) para evitar erro 400 se o ID não existir
     const { data, error } = await supabase
       .from('system_settings')
       .select('*')
-      .eq('id', SYSTEM_SETTINGS_ID)
+      .limit(1)
       .single();
 
     if (error || !data) {
@@ -299,7 +285,6 @@ export const authService = {
     }
   },
 
-  // --- Webhook Simulation ---
   simulateEduzzWebhook: (payload: any) => {
      console.log("Simulando Webhook:", payload);
      return { 

@@ -5,16 +5,16 @@ import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { agendaService } from '../services/agendaService';
 import { useCreateAppointment } from '../services/appointmentService';
-import { authService } from '../services/authService'; // Usado para buscar a lista de usuários/pacientes
+import { authService } from '../services/authService';
 import { Appointment, User as AppUser } from '../types'; 
 import { useToast } from '../contexts/ToastContext';
 
 export const Agenda: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patients, setPatients] = useState<AppUser[]>([]); // Lista para o Dropdown
+  const [patients, setPatients] = useState<AppUser[]>([]); 
   const { addToast } = useToast();
   
-  // HOOK DE CRIAÇÃO BLINDADO (Soft Constraint Logic)
+  // HOOK DE CRIAÇÃO
   const { createAppointment, loading: isCreating } = useCreateAppointment();
 
   // Modal State
@@ -22,7 +22,7 @@ export const Agenda: React.FC = () => {
   
   // Form State
   const [formData, setFormData] = useState({
-    patientId: '',
+    patientId: '', // Usado apenas para controle do UI (Dropdown)
     patientName: '',
     patientPhone: '',
     date: '',
@@ -49,10 +49,7 @@ export const Agenda: React.FC = () => {
 
       setAppointments(validAppts);
       
-      // 2. Carrega Lista de Assinantes/Alunos para o Dropdown
-      // Usamos authService.getSubscribers() ou patientService.getAll() dependendo da regra de negócio.
-      // Assumindo que agendamos para "Assinantes" (Profiles) ou "Pacientes" da tabela patients.
-      // O código anterior usava authService.getSubscribers(), mantendo para consistência.
+      // 2. Carrega Lista para Auto-preenchimento
       const subs = await authService.getSubscribers();
       setPatients(Array.isArray(subs) ? subs : []);
     } catch (e) {
@@ -65,7 +62,6 @@ export const Agenda: React.FC = () => {
     const selectedId = e.target.value;
     
     if (!selectedId) {
-       // Se selecionou "Cadastro Manual", limpa o ID mas permite digitar o nome
        setFormData(prev => ({ 
          ...prev, 
          patientId: '',
@@ -77,7 +73,7 @@ export const Agenda: React.FC = () => {
 
     const patient = patients.find(p => p.id === selectedId);
     if (patient) {
-       // Auto-preenche os dados
+       // Apenas auto-preenche os campos de texto. O ID não será enviado.
        const phone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
        setFormData(prev => ({
          ...prev,
@@ -110,33 +106,20 @@ export const Agenda: React.FC = () => {
         return;
     }
 
-    // 3. Verificação de Integridade do ID (Safety Net)
-    // Se temos um ID, verificamos se ele ainda existe na lista carregada.
-    // Se não existir (ex: usuário deletado recentemente), forçamos null para evitar erro de FK.
-    let finalPatientId: string | null = formData.patientId;
-    
-    if (finalPatientId) {
-      const exists = patients.some(p => p.id === finalPatientId);
-      if (!exists) {
-        console.warn('ID selecionado não encontrado na lista atual. Convertendo para agendamento manual.');
-        finalPatientId = null;
-      }
-    }
-    // Garante que string vazia vire null
-    if (finalPatientId === '') finalPatientId = null;
-
     try {
-      // 4. Chamada ao Serviço via Hook
+      // 3. ENVIO BLINDADO (SEM ID)
+      // Instrução Crítica: Ignoramos formData.patientId e enviamos null.
+      // Salvamos apenas o Nome e Telefone nas colunas de texto para evitar FK Constraints.
       await createAppointment({
-        patientId: finalPatientId, // Pode ser null (Soft Constraint)
-        patientName: cleanName,    // Obrigatório (Denormalizado)
-        patientPhone: cleanPhone,  // Opcional (Denormalizado)
+        patientId: null,           // <--- ID SEMPRE NULO (Correção Definitiva)
+        patientName: cleanName,    // Persistência via Texto
+        patientPhone: cleanPhone,  // Persistência via Texto
         dateTime: `${formData.date}T${formData.time}:00`,
         type: formData.type,
         notes: cleanNotes
       });
       
-      // 5. Reset e Recarga
+      // 4. Reset e Recarga
       setIsModalOpen(false);
       setFormData({ 
         patientId: '', 

@@ -19,7 +19,7 @@ export const Agenda: React.FC = () => {
     patientId: '',
     date: '',
     time: '',
-    type: 'Avaliação Inicial' as Appointment['type'],
+    type: 'Avaliação Inicial' as Appointment['type'], // Default value
     notes: ''
   });
 
@@ -59,6 +59,12 @@ export const Agenda: React.FC = () => {
         return;
     }
 
+    // Validação estrita do tipo
+    if (!formData.type) {
+        addToast('O tipo de sessão é obrigatório.', 'warning');
+        return;
+    }
+
     try {
       // Extração robusta do telefone
       const patientPhone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
@@ -69,7 +75,7 @@ export const Agenda: React.FC = () => {
         patientPhone: patientPhone,
         // Adiciona :00 para garantir formato ISO correto para timestamp (HH:mm:ss)
         dateTime: `${formData.date}T${formData.time}:00`,
-        type: formData.type,
+        type: formData.type, // Garante envio do tipo selecionado
         status: 'Agendado',
         notes: formData.notes
       });

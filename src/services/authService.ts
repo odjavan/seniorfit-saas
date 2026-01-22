@@ -5,7 +5,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
   howToInstallVideoUrl: '',
 };
 
-// ID Singleton mantido apenas para escrita (upsert), leitura será genérica
 const SYSTEM_SETTINGS_ID = '00000000-0000-0000-0000-000000000000';
 
 export const authService = {
@@ -129,41 +128,47 @@ export const authService = {
     }));
   },
 
-  // CORREÇÃO CRÍTICA: Fluxo Sequencial Auth -> Profile
+  // FLUXO DE CRIAÇÃO CORRIGIDO (SEQUENCIAL)
   createUser: async (userData: Partial<User>, password?: string): Promise<void> => {
-    // 1. Cria usuário no Auth Provider para obter o UID
-    // Nota: Em client-side usamos signUp. O admin.createUser requer service_role key que não deve estar no front.
-    // O signUp já retorna o user.id necessário para a constraint de Foreign Key.
+    // 1. PRIMEIRO: Criar no Auth Provider para gerar o UID
+    // O 'admin.createUser' só funciona com service_role key no backend. 
+    // No frontend, usamos 'signUp' que retorna o mesmo objeto User com ID.
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email!,
       password: password || '123456', 
       options: {
         data: {
-          name: userData.name
+          name: userData.name // Metadados úteis para o Auth
         }
       }
     });
 
-    if (authError) throw new Error("Erro no Auth (SignUp): " + authError.message);
-    if (!authData.user) throw new Error("Erro Crítico: Usuário não gerado pelo provedor de identidade.");
+    if (authError) {
+      throw new Error(`Erro na etapa de Autenticação: ${authError.message}`);
+    }
+
+    if (!authData.user || !authData.user.id) {
+      throw new Error("Falha crítica: UID não gerado pelo provedor de identidade.");
+    }
 
     const userId = authData.user.id;
 
-    // 2. Com o UID em mãos, inserimos no Profile (Public Table)
+    // 2. SEGUNDO: Inserir na tabela 'profiles' usando o UID gerado
     const { error: profileError } = await supabase.from('profiles').insert([{
-      id: userId, // VINCULAÇÃO OBRIGATÓRIA
+      id: userId, // Vinculação obrigatória da Foreign Key
       email: userData.email,
       name: userData.name,
-      role: (userData.role || 'SUBSCRIBER').toUpperCase(),
-      subscription_status: (userData.subscriptionStatus || 'ACTIVE').toUpperCase(),
-      cpf: userData.cpf,
-      eduzz_id: userData.eduzzId,
+      // Padronização rigorosa (Upper Case conforme solicitado)
+      role: 'SUBSCRIBER', 
+      subscription_status: 'ACTIVE',
+      cpf: userData.cpf || null,
+      eduzz_id: userData.eduzzId || null,
       created_at: new Date().toISOString()
     }]);
 
     if (profileError) {
       console.error("Erro ao criar perfil:", profileError);
-      throw new Error("Erro ao salvar dados do perfil: " + profileError.message);
+      throw new Error(`Erro ao salvar perfil no banco: ${profileError.message}`);
     }
   },
 
@@ -183,6 +188,8 @@ export const authService = {
   },
 
   deleteUser: async (id: string): Promise<void> => {
+    // Nota: Deletar do 'profiles' não deleta do 'auth.users' sem trigger/cascade.
+    // Em um ambiente Admin real, chamariamos uma Edge Function.
     const { error } = await supabase
       .from('profiles')
       .delete()
@@ -206,7 +213,6 @@ export const authService = {
   },
 
   // --- System Settings ---
-
   getSettings: async (): Promise<SystemSettings> => {
     try {
       const { data } = await supabase
@@ -234,7 +240,6 @@ export const authService = {
   },
 
   // --- Integrations ---
-
   getIntegrationSettings: async (): Promise<IntegrationSettings> => {
     const { data, error } = await supabase
       .from('system_settings')

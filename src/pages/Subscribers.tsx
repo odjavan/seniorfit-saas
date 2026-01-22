@@ -15,12 +15,13 @@ export const Subscribers: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Form State
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: '', // Novo campo de senha
+    password: '', // Campo obrigatório para criação
     role: 'SUBSCRIBER' as Role,
     cpf: '',
     eduzzId: '',
@@ -56,7 +57,7 @@ export const Subscribers: React.FC = () => {
       setFormData({
         name: user.name,
         email: user.email,
-        password: '', // Senha vazia na edição (não alteramos senha por aqui normalmente)
+        password: '', // Em edição, senha vazia significa "não alterar" (embora alteração não seja feita aqui)
         role: user.role,
         cpf: user.cpf || '',
         eduzzId: user.eduzzId || '',
@@ -79,33 +80,40 @@ export const Subscribers: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+
     try {
       const userData = {
         name: formData.name,
         email: formData.email,
-        role: formData.role,
+        role: 'SUBSCRIBER' as Role, // Força SUBSCRIBER
         cpf: formData.cpf,
         eduzzId: formData.eduzzId,
-        subscriptionStatus: formData.subscriptionStatus
+        subscriptionStatus: 'active' as const // Força ACTIVE
       };
 
       if (editingUser) {
+        // Atualização (apenas Profile)
         await authService.updateUser({ ...editingUser, ...userData });
         addToast('Assinante atualizado com sucesso!', 'success');
       } else {
-        // Validação de senha na criação
+        // Criação (Auth -> Profile)
+        // Validação da senha
         if (!formData.password || formData.password.length < 6) {
-           addToast('A senha deve ter pelo menos 6 caracteres.', 'warning');
+           addToast('A senha é obrigatória e deve ter pelo menos 6 caracteres.', 'warning');
+           setIsLoading(false);
            return;
         }
-        // Passa a senha explicitamente para a criação do usuário Auth
+
         await authService.createUser(userData, formData.password);
-        addToast('Assinante criado com sucesso!', 'success');
+        addToast('Novo assinante criado e vinculado com sucesso!', 'success');
       }
       setIsModalOpen(false);
       loadUsers(); // Recarrega lista
     } catch (error: any) {
       addToast(error.message, 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -256,34 +264,29 @@ export const Subscribers: React.FC = () => {
            <div className="grid grid-cols-2 gap-4">
              <div>
                <label className="block text-sm font-bold text-gray-900 mb-1">Status</label>
-               <select 
-                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm"
-                 value={formData.subscriptionStatus}
-                 onChange={e => setFormData({...formData, subscriptionStatus: e.target.value as any})}
-               >
-                 <option value="active">Ativo</option>
-                 <option value="pending">Pendente</option>
-                 <option value="cancelled">Cancelado</option>
-               </select>
+               <input 
+                 className="w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-gray-500 cursor-not-allowed sm:text-sm"
+                 value="Ativo"
+                 disabled
+               />
+               <p className="text-xs text-gray-400 mt-1">Definido como ACTIVE por padrão.</p>
              </div>
              <div>
                <label className="block text-sm font-bold text-gray-900 mb-1">Função</label>
-               <select 
-                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm"
-                 value={formData.role}
-                 onChange={e => setFormData({...formData, role: e.target.value as any})}
-               >
-                 <option value="SUBSCRIBER">Assinante</option>
-                 <option value="TRAINER">Treinador</option>
-                 <option value="PERSONAL">Personal</option>
-                 <option value="ADMIN">Admin</option>
-               </select>
+               <input 
+                 className="w-full rounded-md border border-gray-300 bg-gray-100 px-3 py-2 text-gray-500 cursor-not-allowed sm:text-sm"
+                 value="Assinante"
+                 disabled
+               />
+               <p className="text-xs text-gray-400 mt-1">Definido como SUBSCRIBER por padrão.</p>
              </div>
            </div>
 
            <div className="flex justify-end pt-4">
               <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="mr-2">Cancelar</Button>
-              <Button type="submit" variant="blue">Salvar</Button>
+              <Button type="submit" variant="blue" isLoading={isLoading}>
+                 {isLoading ? 'Salvando...' : 'Salvar'}
+              </Button>
            </div>
         </form>
       </Modal>

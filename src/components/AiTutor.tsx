@@ -76,10 +76,10 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       // Inicialização segura
       const genAI = new GoogleGenerativeAI(apiKey);
       
-      // Configuração para V1Beta e Gemini 2.0
+      // Configuração limpa para Gemini 2.0 (sem apiVersion que quebra o TS)
       const model = genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash" 
-      }, { apiVersion: 'v1beta' });
+      });
 
       const context = `
         PACIENTE ATUAL:
@@ -116,6 +116,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       let errorMsg = "Desculpe, tive um problema técnico ao conectar com a IA.";
       if (err.message?.includes('403') || err.message?.includes('API key')) {
         errorMsg = "Erro de Permissão: Verifique se sua chave API é válida.";
+      } else if (err.message?.includes('404')) {
+        errorMsg = "Erro de Modelo: O modelo gemini-2.0-flash pode não estar disponível para sua chave/região ainda.";
       }
 
       setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
@@ -138,9 +140,10 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
 
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
+      // Configuração limpa para Gemini 2.0
       const model = genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash" 
-      }, { apiVersion: 'v1beta' });
+      });
       
       const systemInstruction = `
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 

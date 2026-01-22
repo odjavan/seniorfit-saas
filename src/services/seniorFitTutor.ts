@@ -134,7 +134,7 @@ export class SeniorFitTutor {
         // TRATAMENTO ESPECÍFICO DE ERRO 429 (QUOTA EXCEEDED)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         
-        if (error.status === 429 || error.message?.includes('quota')) {
+        if (error.status === 429 || error.message?.includes('quota') || error.message?.includes('429')) {
           console.error('🚫 Quota do Google Gemini excedida')
           
           return {

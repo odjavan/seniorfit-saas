@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { useState } from 'react';
-import { User, Role } from '../types';
+import { User } from '../types';
 
 // Credenciais para o cliente temporário (necessário para criar usuário sem deslogar o admin)
 const supabaseUrl = 'https://seporcnzpysaniisprin.supabase.co';
@@ -99,11 +99,6 @@ export const subscriberService = {
       if (createdAuthId) {
         console.log('⚠️ [SubscriberService] Executando Rollback...');
         try {
-          // Nota: deleteUser requer service_role ou ser o próprio usuário. 
-          // Como estamos no cliente admin, tentamos via RPC ou admin API se disponível,
-          // Caso contrário, o usuário fica "órfão" no Auth mas sem acesso ao sistema (sem profile).
-          // Em um ambiente puramente client-side sem Service Role, o rollback completo é limitado,
-          // mas evitamos o estado inconsistente na UI.
           await supabase.auth.admin.deleteUser(createdAuthId);
           console.log('✅ [SubscriberService] Rollback concluído.');
         } catch (rollbackError) {

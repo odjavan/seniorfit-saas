@@ -4,7 +4,7 @@ import { authService } from '../services/authService';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
-import { Search, Plus, MoreVertical, Edit, Shield, Lock } from 'lucide-react';
+import { Search, Plus, Edit, Shield, Lock } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 
 export const Subscribers: React.FC = () => {
@@ -98,6 +98,7 @@ export const Subscribers: React.FC = () => {
            addToast('A senha deve ter pelo menos 6 caracteres.', 'warning');
            return;
         }
+        // Passa a senha explicitamente para a criação do usuário Auth
         await authService.createUser(userData, formData.password);
         addToast('Assinante criado com sucesso!', 'success');
       }

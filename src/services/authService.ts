@@ -129,13 +129,14 @@ export const authService = {
     }));
   },
 
-  // CORREÇÃO: Adicionado parâmetro password opcional
+  // CORREÇÃO CRÍTICA: Fluxo Sequencial Auth -> Profile
   createUser: async (userData: Partial<User>, password?: string): Promise<void> => {
-    // 1. Cria usuário no Auth (Provider Identity)
-    // Usamos signUp do lado do cliente. Se fosse server-side, usaríamos admin.createUser
+    // 1. Cria usuário no Auth Provider para obter o UID
+    // Nota: Em client-side usamos signUp. O admin.createUser requer service_role key que não deve estar no front.
+    // O signUp já retorna o user.id necessário para a constraint de Foreign Key.
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email!,
-      password: password || '123456', // Usa a senha fornecida ou fallback
+      password: password || '123456', 
       options: {
         data: {
           name: userData.name
@@ -144,13 +145,13 @@ export const authService = {
     });
 
     if (authError) throw new Error("Erro no Auth (SignUp): " + authError.message);
-    if (!authData.user) throw new Error("Erro: Usuário não criado no Auth.");
+    if (!authData.user) throw new Error("Erro Crítico: Usuário não gerado pelo provedor de identidade.");
 
-    // 2. Garante que temos o ID antes de inserir no Public Profiles
     const userId = authData.user.id;
 
+    // 2. Com o UID em mãos, inserimos no Profile (Public Table)
     const { error: profileError } = await supabase.from('profiles').insert([{
-      id: userId, // Constraint Foreign Key: Este ID deve existir em auth.users
+      id: userId, // VINCULAÇÃO OBRIGATÓRIA
       email: userData.email,
       name: userData.name,
       role: (userData.role || 'SUBSCRIBER').toUpperCase(),
@@ -162,8 +163,7 @@ export const authService = {
 
     if (profileError) {
       console.error("Erro ao criar perfil:", profileError);
-      // Se falhar o perfil, idealmente deveríamos limpar o Auth, mas vamos apenas reportar por enquanto
-      throw new Error("Erro ao criar perfil no banco: " + profileError.message);
+      throw new Error("Erro ao salvar dados do perfil: " + profileError.message);
     }
   },
 

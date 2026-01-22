@@ -50,12 +50,12 @@ export const agendaService = {
 
     const dbPayload = {
       patient_id: appointment.patientId,
-      patient_name: appointment.patientName,
+      patient_name: appointment.patientName, // Campo Obrigatório para visualização
       patient_phone: appointment.patientPhone,
       date_time: appointment.dateTime,
       type: appointment.type,
       status: appointment.status,
-      notes: appointment.notes || '' // Garante string vazia se undefined
+      notes: appointment.notes || ''
     };
 
     const { data, error } = await supabase

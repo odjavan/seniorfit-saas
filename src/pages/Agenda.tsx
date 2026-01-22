@@ -4,13 +4,12 @@ import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { agendaService } from '../services/agendaService';
-import { authService } from '../services/authService'; // Trocado de patientService para authService
-import { Appointment, User as AppUser } from '../types'; // Importando User
+import { authService } from '../services/authService';
+import { Appointment, User as AppUser } from '../types'; 
 import { useToast } from '../contexts/ToastContext';
 
 export const Agenda: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  // Agora usamos a lista de Usuários (Assinantes) como pacientes
   const [patients, setPatients] = useState<AppUser[]>([]);
   const { addToast } = useToast();
   
@@ -30,11 +29,9 @@ export const Agenda: React.FC = () => {
 
   const loadAndSanitizeData = async () => {
     try {
-      // 1. Carregamento Seguro
       const rawAppts = await agendaService.getAll();
       const safeAppts = Array.isArray(rawAppts) ? rawAppts : [];
       
-      // 2. Protocolo de Saneamento (Data Cleaning)
       const validAppts = safeAppts.filter(appt => {
         if (!appt.dateTime) return false;
         const timestamp = new Date(appt.dateTime).getTime();
@@ -43,7 +40,6 @@ export const Agenda: React.FC = () => {
 
       setAppointments(validAppts);
       
-      // CORREÇÃO: Buscando da tabela profiles com filtro 'SUBSCRIBER'
       const subs = await authService.getSubscribers();
       setPatients(Array.isArray(subs) ? subs : []);
     } catch (e) {
@@ -55,17 +51,20 @@ export const Agenda: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Busca o objeto completo do usuário/paciente para extrair o nome
     const patient = patients.find(p => p.id === formData.patientId);
-    if (!patient) return;
+    
+    if (!patient) {
+        addToast('Selecione um aluno válido.', 'warning');
+        return;
+    }
 
     try {
-      // ID é gerado internamente no serviço usando generateId()
       await agendaService.create({
         patientId: patient.id,
-        patientName: patient.name,
-        // Como User não tem whatsapp garantido, usamos um fallback vazio ou buscamos se disponível
+        patientName: patient.name, // Garante que o nome está sendo passado
         patientPhone: (patient as any).whatsapp || '', 
-        dateTime: `${formData.date}T${formData.time}`, // Formato ISO Obrigatório
+        dateTime: `${formData.date}T${formData.time}`,
         type: formData.type,
         status: 'Agendado',
         notes: formData.notes
@@ -94,24 +93,16 @@ export const Agenda: React.FC = () => {
     }
   };
 
-  // Esta função depende de 'Patient', mas agora temos 'User'. 
-  // Para evitar quebrar a compilação, desativamos temporariamente a verificação profunda de testes pendentes 
-  // ou assumimos que não há dados de testes para Usuários recém migrados.
   const getPendingTests = (patientId: string) => {
-    // Lógica simplificada pois User não carrega 'tests' por padrão no getAllUsers
-    // Se necessário, fazer um fetch individual no futuro.
     return [];
   };
 
-  // Agrupamento Seguro por Data ISO (YYYY-MM-DD)
   const groupedAppointments = appointments.reduce((groups, appt) => {
     try {
       const dateKey = appt.dateTime.split('T')[0];
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(appt);
-    } catch (e) {
-      // Ignora registros inválidos
-    }
+    } catch (e) {}
     return groups;
   }, {} as Record<string, Appointment[]>);
 

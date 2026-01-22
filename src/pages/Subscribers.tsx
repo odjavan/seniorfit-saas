@@ -13,7 +13,7 @@ export const Subscribers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const { addToast } = useToast();
   
-  // HOOK DE CRIAÇÃO BLINDADO (Auth + Profile + Rollback)
+  // HOOK DE CRIAÇÃO BLINDADO
   const { createSubscriber, loading: isCreating } = useCreateSubscriber();
   
   // Modal State
@@ -86,33 +86,37 @@ export const Subscribers: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
 
+    // Sanitização no Frontend (Camada 1 de Proteção)
+    const safeEmail = formData.email.trim().toLowerCase();
+    const safeName = formData.name.trim();
+
     try {
       if (editingUser) {
-        // ATUALIZAÇÃO: Usa o serviço direto (sem hook de criação)
+        // ATUALIZAÇÃO
         const updateData = {
           ...editingUser,
-          name: formData.name,
-          cpf: formData.cpf,
-          eduzzId: formData.eduzzId,
+          name: safeName,
+          cpf: formData.cpf.trim(),
+          eduzzId: formData.eduzzId.trim(),
           subscriptionStatus: formData.subscriptionStatus
         };
         await subscriberService.updateSubscriber(updateData);
         addToast('Assinante atualizado com sucesso!', 'success');
       } else {
-        // CRIAÇÃO: Usa o Hook useCreateSubscriber
-        // Validação básica de senha
+        // CRIAÇÃO: Validação de Senha
         if (!formData.password || formData.password.length < 6) {
            addToast('A senha é obrigatória e deve ter pelo menos 6 caracteres.', 'warning');
            setIsLoading(false);
            return;
         }
 
+        // Chama o hook blindado com dados limpos
         await createSubscriber({
-          name: formData.name,
-          email: formData.email,
+          name: safeName,
+          email: safeEmail,
           password: formData.password,
-          cpf: formData.cpf,
-          eduzzId: formData.eduzzId
+          cpf: formData.cpf.trim(),
+          eduzzId: formData.eduzzId.trim()
         });
         
         addToast('Novo assinante criado e vinculado com sucesso!', 'success');
@@ -120,7 +124,6 @@ export const Subscribers: React.FC = () => {
       setIsModalOpen(false);
       loadUsers(); 
     } catch (error: any) {
-      // Feedback Visual de Erro vindo do Serviço
       const msg = error.message || 'Erro ao processar solicitação.';
       addToast(msg, 'error');
     } finally {

@@ -24,23 +24,27 @@ interface SubscriberResponse {
 export const subscriberService = {
   /**
    * Cria um novo assinante com consistência transacional simulada.
-   * 1. Cria no Auth (usando cliente temporário)
-   * 2. Cria no Profile (usando cliente admin)
-   * 3. Se Profile falhar, deleta do Auth (Rollback)
+   * Lógica espelhada do authService.createUser (AdminPanel)
    */
   createManualSubscriber: async (data: CreateSubscriberDTO): Promise<SubscriberResponse> => {
-    console.log('🔄 [SubscriberService] Iniciando cadastro:', data.email);
+    // 1. SANITIZAÇÃO DE DADOS (CRÍTICO PARA CORRIGIR "Email address is invalid")
+    const sanitizedEmail = data.email.trim().toLowerCase();
+    const sanitizedName = data.name.trim();
+    const sanitizedCpf = data.cpf ? data.cpf.trim() : null;
+    const sanitizedEduzzId = data.eduzzId ? data.eduzzId.trim() : null;
+
+    console.log('🔄 [SubscriberService] Iniciando cadastro blindado:', sanitizedEmail);
     let createdAuthId: string | null = null;
 
-    // 0. Validação Prévia
-    if (!data.email || !data.email.includes('@')) throw new Error('Email inválido.');
-    if (!data.name || data.name.length < 3) throw new Error('Nome muito curto.');
+    // Validação Prévia
+    if (!sanitizedEmail || !sanitizedEmail.includes('@')) throw new Error('Email inválido ou mal formatado.');
+    if (!sanitizedName || sanitizedName.length < 3) throw new Error('Nome muito curto.');
     
     // Senha padrão se não fornecida
     const finalPassword = data.password && data.password.length >= 6 ? data.password : '123456';
 
     try {
-      // 1. Criar Cliente Temporário (evita logout do Admin)
+      // 2. Criar Cliente Temporário (evita logout do Admin)
       const tempSupabase = createClient(supabaseUrl, supabaseAnonKey, {
         auth: {
           persistSession: false,
@@ -49,12 +53,12 @@ export const subscriberService = {
         }
       });
 
-      // 2. Criar Usuário no Auth
+      // 3. Criar Usuário no Auth com Email Sanitizado
       const { data: authData, error: authError } = await tempSupabase.auth.signUp({
-        email: data.email,
+        email: sanitizedEmail,
         password: finalPassword,
         options: {
-          data: { name: data.name }
+          data: { name: sanitizedName }
         }
       });
 
@@ -62,7 +66,8 @@ export const subscriberService = {
         if (authError.message.includes('already registered')) {
           throw new Error('Este e-mail já está cadastrado no sistema.');
         }
-        throw new Error(`Erro na Autenticação: ${authError.message}`);
+        // Repassa erro original do Supabase (ex: Email address is invalid)
+        throw new Error(`Erro Auth: ${authError.message}`);
       }
 
       if (!authData.user?.id) {
@@ -72,15 +77,15 @@ export const subscriberService = {
       createdAuthId = authData.user.id;
       console.log('✅ [SubscriberService] Auth criado. ID:', createdAuthId);
 
-      // 3. Criar Perfil (Profile)
+      // 4. Criar Perfil (Profile)
       const { error: profileError } = await supabase.from('profiles').insert([{
         id: createdAuthId,
-        email: data.email,
-        name: data.name,
+        email: sanitizedEmail,
+        name: sanitizedName,
         role: 'SUBSCRIBER',
         subscription_status: 'ACTIVE',
-        cpf: data.cpf || null,
-        eduzz_id: data.eduzzId || null,
+        cpf: sanitizedCpf,
+        eduzz_id: sanitizedEduzzId,
         created_at: new Date().toISOString()
       }]);
 

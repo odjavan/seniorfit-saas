@@ -14,13 +14,13 @@ export const Agenda: React.FC = () => {
   const [patients, setPatients] = useState<AppUser[]>([]);
   const { addToast } = useToast();
   
-  // HOOK DE CRIAÇÃO BLINDADO (Soft Constraint Logic)
+  // HOOK DE CRIAÇÃO BLINDADO
   const { createAppointment, loading: isCreating } = useCreateAppointment();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Form State expandido para suportar entrada manual
+  // Form State
   const [formData, setFormData] = useState({
     patientId: '',
     patientName: '',
@@ -48,7 +48,6 @@ export const Agenda: React.FC = () => {
 
       setAppointments(validAppts);
       
-      // Carrega lista de assinantes para o autocomplete
       const subs = await authService.getSubscribers();
       setPatients(Array.isArray(subs) ? subs : []);
     } catch (e) {
@@ -80,7 +79,7 @@ export const Agenda: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validação foca no Nome (Obrigatório), ID é opcional (Soft Constraint)
+    // Validação foca no Nome (Obrigatório)
     if (!formData.patientName) {
         addToast('O nome do aluno é obrigatório.', 'warning');
         return;
@@ -97,12 +96,12 @@ export const Agenda: React.FC = () => {
     }
 
     try {
-      // SMART LINK: Envia ID apenas se existir, senão envia null para evitar FK Error
-      // Toda a lógica de inserção agora reside no useCreateAppointment -> appointmentService
+      // SOFT CONSTRAINT IMPLEMENTADA
+      // Envia ID apenas se existir, senão envia null. Nome e Telefone vão como texto.
       await createAppointment({
         patientId: formData.patientId || null,
-        patientName: formData.patientName,
-        patientPhone: formData.patientPhone,
+        patientName: formData.patientName.trim(), // Sanitização
+        patientPhone: formData.patientPhone.trim(), // Sanitização
         dateTime: `${formData.date}T${formData.time}:00`,
         type: formData.type,
         notes: formData.notes
@@ -114,7 +113,6 @@ export const Agenda: React.FC = () => {
       addToast('Agendamento realizado com sucesso!', 'success');
     } catch (error: any) {
       console.error(error);
-      // Feedback visual de erro vindo do serviço
       addToast(error.message || 'Erro ao criar agendamento', 'warning');
     }
   };

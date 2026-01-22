@@ -14,13 +14,17 @@ export const Agenda: React.FC = () => {
   const [patients, setPatients] = useState<AppUser[]>([]);
   const { addToast } = useToast();
   
-  // Hook de criação
+  // Hook de criação blindado
   const { createAppointment, loading: isCreating } = useCreateAppointment();
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Form State expandido para suportar entrada manual (Soft Constraint)
   const [formData, setFormData] = useState({
     patientId: '',
+    patientName: '',
+    patientPhone: '',
     date: '',
     time: '',
     type: 'Avaliação Inicial' as Appointment['type'], 
@@ -44,7 +48,7 @@ export const Agenda: React.FC = () => {
 
       setAppointments(validAppts);
       
-      // Carrega lista de assinantes
+      // Carrega lista de assinantes para o autocomplete
       const subs = await authService.getSubscribers();
       setPatients(Array.isArray(subs) ? subs : []);
     } catch (e) {
@@ -53,13 +57,32 @@ export const Agenda: React.FC = () => {
     }
   };
 
+  const handlePatientSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedId = e.target.value;
+    
+    if (!selectedId) {
+       setFormData(prev => ({ ...prev, patientId: '' }));
+       return;
+    }
+
+    const patient = patients.find(p => p.id === selectedId);
+    if (patient) {
+       const phone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
+       setFormData(prev => ({
+         ...prev,
+         patientId: selectedId,
+         patientName: patient.name,
+         patientPhone: phone
+       }));
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const patient = patients.find(p => p.id === formData.patientId);
-    
-    if (!patient) {
-        addToast('Selecione um aluno válido da lista.', 'warning');
+    // Validação foca no Nome (Obrigatório), ID é opcional (Soft Constraint)
+    if (!formData.patientName) {
+        addToast('O nome do aluno é obrigatório.', 'warning');
         return;
     }
 
@@ -68,21 +91,24 @@ export const Agenda: React.FC = () => {
         return;
     }
 
+    if (!formData.date || !formData.time) {
+        addToast('Data e horário são obrigatórios.', 'warning');
+        return;
+    }
+
     try {
-      const patientPhone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
-      
-      // Uso do novo hook de criação
+      // Smart Link: Envia ID apenas se existir, senão envia null para evitar FK Error
       await createAppointment({
-        patientId: patient.id,
-        patientName: patient.name,
-        patientPhone: patientPhone,
+        patientId: formData.patientId || null,
+        patientName: formData.patientName,
+        patientPhone: formData.patientPhone,
         dateTime: `${formData.date}T${formData.time}:00`,
         type: formData.type,
         notes: formData.notes
       });
       
       setIsModalOpen(false);
-      setFormData({ patientId: '', date: '', time: '', type: 'Avaliação Inicial', notes: '' });
+      setFormData({ patientId: '', patientName: '', patientPhone: '', date: '', time: '', type: 'Avaliação Inicial', notes: '' });
       loadAndSanitizeData();
       addToast('Agendamento realizado com sucesso!', 'success');
     } catch (error: any) {
@@ -251,22 +277,37 @@ export const Agenda: React.FC = () => {
         title="Agendar Atendimento"
       >
         <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-sm font-bold text-gray-900 mb-1">Aluno (Assinante)</label>
-            <select
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.patientId}
-              onChange={e => setFormData({...formData, patientId: e.target.value})}
-              required
-            >
-              <option value="">Selecione...</option>
-              {patients.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">
-               Listando apenas usuários com perfil 'SUBSCRIBER'.
-            </p>
+          <div className="space-y-4">
+             <div>
+                <label className="block text-sm font-bold text-gray-900 mb-1">Selecionar Aluno (Opcional)</label>
+                <select
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.patientId}
+                  onChange={handlePatientSelect}
+                >
+                  <option value="">-- Cadastro Manual --</option>
+                  {patients.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Selecione para auto-preencher ou deixe vazio para digitar.</p>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <Input 
+                   label="Nome do Aluno" 
+                   value={formData.patientName} 
+                   onChange={e => setFormData({...formData, patientName: e.target.value})} 
+                   required
+                   placeholder="Ex: João da Silva"
+                 />
+                 <Input 
+                   label="Telefone / WhatsApp" 
+                   value={formData.patientPhone} 
+                   onChange={e => setFormData({...formData, patientPhone: e.target.value})} 
+                   placeholder="(11) 99999-9999"
+                 />
+             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

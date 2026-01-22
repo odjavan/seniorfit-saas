@@ -1,8 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Patient } from '../types';
 import { X, Send, Bot, Sparkles } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
-import { authService } from '../services/authService';
 
 interface AiTutorProps {
   patient: Patient;
@@ -19,30 +19,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
-
-  // Acesso seguro à chave API (Prioridade: Settings do Banco > Env Var)
-  const getApiKey = async () => {
-    try {
-      const settings = await authService.getIntegrationSettings();
-      
-      if (settings.gemini?.apiKey && settings.gemini.apiKey.length > 5) {
-        return settings.gemini.apiKey.trim();
-      }
-
-      const envKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (envKey) {
-        return envKey.trim();
-      }
-
-      return '';
-    } catch (e) {
-      console.error("Erro ao buscar API Key:", e);
-      return '';
-    }
-  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -58,16 +36,9 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   }, [isOpen]);
 
   const initChat = async () => {
-    const apiKey = await getApiKey();
-    if (!apiKey) {
-      setMessages([{ role: 'model', text: 'ERRO DE CONFIGURAÇÃO: Chave API do Google Gemini não encontrada. Por favor, vá em "Integrações" no Painel Admin e configure sua chave.' }]);
-      return;
-    }
-
     setIsLoading(true);
     try {
-      // Inicialização usando a nova SDK @google/genai
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const context = `
         PACIENTE ATUAL:
@@ -101,41 +72,29 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         setMessages(prev => [...prev, { role: 'model', text }]);
       }
     } catch (err: any) {
-      console.error("🚨 [Tutor IA] ERRO CRÍTICO GEMINI 2.0:", err);
-      
-      let errorMsg = "Erro ao iniciar o Tutor. Verifique o console para detalhes técnicos.";
-      
-      if (err.message?.includes('API_KEY_INVALID')) errorMsg = "Erro: Chave API inválida.";
-      else if (err.message?.includes('location')) errorMsg = "Erro: Região não suportada ou Geo-block ativo.";
-      else if (err.message?.includes('permission')) errorMsg = "Erro de Permissão: Verifique se sua chave tem acesso ao Gemini 2.0.";
-      
-      setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
+      console.error("🚨 [Tutor IA] ERRO CRÍTICO:", err);
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: "Desculpe, tive um problema ao analisar os dados. Verifique a configuração da chave de API no ambiente." 
+      }]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const sendMessageToGemini = async (text: string) => {
-    const apiKey = await getApiKey();
-    
-    if (!apiKey) {
-      setMessages(prev => [...prev, { role: 'model', text: "Chave API perdida. Recarregue a página." }]);
-      return;
-    }
-
     setMessages(prev => [...prev, { role: 'user', text }]);
     setIsLoading(true);
-    setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const systemInstruction = `
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 
-        Seja técnico e baseie-se no ACSM/NSCA. 
+        Seja técnico e baseie-se no ACSM/NSCA (American College of Sports Medicine / National Strength and Conditioning Association). 
         Você não diagnostica doenças e não faz alterações no sistema.
-        Se o aluno relatar patologias (ex: artrose), cruze com os dados funcionais para sugerir adaptações seguras.
-        Responda sempre em Português do Brasil.
+        Se o aluno relatar patologias (ex: artrose), cruze com os dados funcionais para sugerir adaptações seguras de treinamento.
+        Responda sempre em Português do Brasil de forma clara e profissional.
       `;
 
       const response = await ai.models.generateContent({
@@ -148,8 +107,11 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);
       }
     } catch (err: any) {
-      console.error("🚨 [Tutor IA] ERRO NA RESPOSTA 2.0:", err);
-      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação. Tente novamente." }]);
+      console.error("🚨 [Tutor IA] ERRO NA RESPOSTA:", err);
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: "Erro ao processar sua pergunta. Por favor, tente novamente em alguns instantes." 
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -202,12 +164,11 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
                      <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-100"></span>
                      <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce delay-200"></span>
                    </div>
-                   <span className="text-xs text-gray-400">Digitando...</span>
+                   <span className="text-xs text-gray-400">Analisando...</span>
                  </div>
                </div>
             </div>
           )}
-          {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs">{error}</div>}
         </div>
 
         <div className="p-4 bg-white border-t border-gray-200">
@@ -220,6 +181,12 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
                rows={2}
                disabled={isLoading}
                readOnly={isLoading}
+               onKeyDown={(e) => {
+                 if (e.key === 'Enter' && !e.shiftKey) {
+                   e.preventDefault();
+                   handleSend();
+                 }
+               }}
              />
              <button 
                 onClick={handleSend} 
@@ -230,7 +197,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
              </button>
            </div>
            <p className="text-[10px] text-center text-gray-400 mt-2">
-             IA pode cometer erros. Verifique informações médicas importantes.
+             IA pode cometer erros. Consulte diretrizes oficiais de saúde.
            </p>
         </div>
       </div>

@@ -27,7 +27,12 @@ export const agendaService = {
   },
 
   create: async (appointment: Omit<Appointment, 'id'>): Promise<Appointment> => {
-    // Verificação de conflito básica
+    // 1. Validação de Segurança para evitar Erro 400
+    if (!appointment.patientName) {
+      throw new Error("O nome do aluno é obrigatório para o agendamento.");
+    }
+
+    // 2. Verificação de conflito básica
     const { data: existing } = await supabase
       .from('appointments')
       .select('date_time')
@@ -48,14 +53,15 @@ export const agendaService = {
       }
     }
 
+    // 3. Payload estrito alinhado com o banco de dados (Snake Case)
     const dbPayload = {
       patient_id: appointment.patientId,
-      patient_name: appointment.patientName, // Campo Obrigatório para visualização
-      patient_phone: appointment.patientPhone,
+      patient_name: appointment.patientName,          // Coluna: patient_name
+      patient_phone: appointment.patientPhone || '',  // Coluna: patient_phone (evita null)
       date_time: appointment.dateTime,
       type: appointment.type,
       status: appointment.status,
-      notes: appointment.notes || ''
+      notes: appointment.notes || ''                  // Coluna: notes (evita null)
     };
 
     const { data, error } = await supabase
@@ -64,7 +70,10 @@ export const agendaService = {
       .select()
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("Supabase Create Error:", error);
+      throw new Error(error.message);
+    }
 
     return {
       id: data.id,

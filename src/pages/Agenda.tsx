@@ -60,11 +60,15 @@ export const Agenda: React.FC = () => {
     }
 
     try {
+      // Extração robusta do telefone
+      const patientPhone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
+
       await agendaService.create({
         patientId: patient.id,
-        patientName: patient.name, // Garante que o nome está sendo passado
-        patientPhone: (patient as any).whatsapp || '', 
-        dateTime: `${formData.date}T${formData.time}`,
+        patientName: patient.name, 
+        patientPhone: patientPhone,
+        // Adiciona :00 para garantir formato ISO correto para timestamp (HH:mm:ss)
+        dateTime: `${formData.date}T${formData.time}:00`,
         type: formData.type,
         status: 'Agendado',
         notes: formData.notes
@@ -75,7 +79,8 @@ export const Agenda: React.FC = () => {
       loadAndSanitizeData();
       addToast('Agendamento realizado com sucesso!', 'success');
     } catch (error: any) {
-      addToast(error.message, 'warning');
+      console.error(error);
+      addToast(error.message || 'Erro ao criar agendamento', 'warning');
     }
   };
 

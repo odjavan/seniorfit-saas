@@ -44,9 +44,11 @@ export const authService = {
       id: profile.id,
       email: profile.email,
       name: profile.name,
-      role: profile.role as Role,
+      // Normalização: Banco (SUBSCRIBER) -> App (SUBSCRIBER)
+      role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
-      subscriptionStatus: profile.subscription_status,
+      // Normalização: Banco (ACTIVE) -> App (active)
+      subscriptionStatus: profile.subscription_status?.toLowerCase(),
       cpf: profile.cpf,
       eduzzId: profile.eduzz_id
     };
@@ -73,9 +75,11 @@ export const authService = {
       id: profile.id,
       email: profile.email,
       name: profile.name,
-      role: profile.role as Role,
+      // Normalização: Banco (SUBSCRIBER) -> App (SUBSCRIBER)
+      role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
-      subscriptionStatus: profile.subscription_status,
+      // Normalização: Banco (ACTIVE) -> App (active)
+      subscriptionStatus: profile.subscription_status?.toLowerCase(),
       cpf: profile.cpf,
       eduzzId: profile.eduzz_id
     };
@@ -98,9 +102,11 @@ export const authService = {
       id: profile.id,
       email: profile.email,
       name: profile.name,
-      role: profile.role as Role,
+      // Normalização de Role
+      role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
-      subscriptionStatus: profile.subscription_status,
+      // Normalização de Status: Garante que 'ACTIVE' vire 'active' para as badges funcionarem
+      subscriptionStatus: profile.subscription_status?.toLowerCase(),
       cpf: profile.cpf,
       eduzzId: profile.eduzz_id,
       lastPaymentDate: profile.last_payment_date
@@ -109,8 +115,6 @@ export const authService = {
 
   createUser: async (userData: Partial<User>): Promise<void> => {
     // Nota: A criação real de Auth requer Service Role Key no backend.
-    // Aqui inserimos no 'profiles' para que o Admin veja o usuário na lista.
-    // O ideal é ter um fluxo de convite ou Edge Function para criar o Auth.
     
     const fakeId = generateId(); // ID temporário
     
@@ -121,7 +125,7 @@ export const authService = {
       role: userData.role || 'SUBSCRIBER',
       cpf: userData.cpf,
       eduzz_id: userData.eduzzId,
-      subscription_status: userData.subscriptionStatus || 'active',
+      subscription_status: userData.subscriptionStatus?.toUpperCase() || 'ACTIVE', // Garante gravação em UPPERCASE
       created_at: new Date().toISOString()
     }]);
 
@@ -136,7 +140,7 @@ export const authService = {
         role: user.role,
         cpf: user.cpf,
         eduzz_id: user.eduzzId,
-        subscription_status: user.subscriptionStatus
+        subscription_status: user.subscriptionStatus?.toUpperCase() // Garante gravação em UPPERCASE
       })
       .eq('id', user.id);
 
@@ -156,10 +160,11 @@ export const authService = {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
+    // CORREÇÃO CRÍTICA: Busca por 'SUBSCRIBER' em MAIÚSCULO conforme padrão do banco
     const { count, error } = await supabase
       .from('profiles')
       .select('*', { count: 'exact', head: true })
-      .eq('role', 'SUBSCRIBER')
+      .eq('role', 'SUBSCRIBER') 
       .gte('created_at', today.toISOString());
 
     if (error) return 0;
@@ -167,7 +172,6 @@ export const authService = {
   },
 
   // --- System Settings (Admin Panel - Video URL) ---
-  // Mapeado para a nova tabela system_settings na coluna video_url
 
   getSettings: async (): Promise<SystemSettings> => {
     try {
@@ -187,7 +191,6 @@ export const authService = {
   },
 
   updateSettings: async (settings: SystemSettings): Promise<void> => {
-    // Upsert na tabela nova usando o ID fixo
     const { error } = await supabase.from('system_settings').upsert({
       id: SYSTEM_SETTINGS_ID,
       video_url: settings.howToInstallVideoUrl
@@ -197,7 +200,6 @@ export const authService = {
   },
 
   // --- Integrations (Admin Panel - API Keys) ---
-  // Mapeado para a nova tabela system_settings
 
   getIntegrationSettings: async (): Promise<IntegrationSettings> => {
     const { data, error } = await supabase
@@ -214,7 +216,6 @@ export const authService = {
       };
     }
 
-    // Mapeamento Flat (DB) -> Nested (App)
     return {
       emailjs: {
         serviceId: data.emailjs_service_id || '',
@@ -223,7 +224,6 @@ export const authService = {
         publicKey: data.emailjs_public_key || ''
       },
       eduzz: {
-        // Reconstrói a URL do webhook baseada no app_url salvo
         webhookUrl: data.app_url ? `${data.app_url.replace(/\/$/, '')}/api/webhooks/eduzz` : '',
         liveKey: '', 
         appUrl: data.app_url || ''

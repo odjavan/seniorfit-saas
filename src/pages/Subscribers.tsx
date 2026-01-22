@@ -104,7 +104,9 @@ export const Subscribers: React.FC = () => {
   };
 
   const getStatusBadge = (status?: string) => {
-    switch(status) {
+    // CORREÇÃO: Normaliza para lowercase para garantir match com 'ACTIVE' ou 'active'
+    const s = status?.toLowerCase();
+    switch(s) {
       case 'active': return <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800">ATIVO</span>;
       case 'pending': return <span className="px-2 py-1 text-xs font-bold rounded-full bg-yellow-100 text-yellow-800">PENDENTE</span>;
       case 'cancelled': return <span className="px-2 py-1 text-xs font-bold rounded-full bg-red-100 text-red-800">CANCELADO</span>;

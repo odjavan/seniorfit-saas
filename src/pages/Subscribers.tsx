@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../types';
 import { authService } from '../services/authService';
+import { useCreateSubscriber, subscriberService } from '../services/subscriberService';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
@@ -12,6 +13,9 @@ export const Subscribers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const { addToast } = useToast();
   
+  // Hook do novo serviço de criação blindado
+  const { createSubscriber, loading: isCreating } = useCreateSubscriber();
+  
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -21,7 +25,7 @@ export const Subscribers: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: '', // Campo obrigatório para criação
+    password: '', 
     role: 'SUBSCRIBER' as Role,
     cpf: '',
     eduzzId: '',
@@ -34,6 +38,7 @@ export const Subscribers: React.FC = () => {
 
   const loadUsers = async () => {
     try {
+      // Mantemos o authService para leitura (listagem)
       const data = await authService.getSubscribers();
       if (Array.isArray(data)) {
         setUsers(data);
@@ -57,7 +62,7 @@ export const Subscribers: React.FC = () => {
       setFormData({
         name: user.name,
         email: user.email,
-        password: '', // Em edição, senha vazia significa "não alterar"
+        password: '', 
         role: user.role,
         cpf: user.cpf || '',
         eduzzId: user.eduzzId || '',
@@ -83,33 +88,37 @@ export const Subscribers: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const userData = {
-        name: formData.name,
-        email: formData.email,
-        role: 'SUBSCRIBER' as Role, // Força SUBSCRIBER
-        cpf: formData.cpf,
-        eduzzId: formData.eduzzId,
-        subscriptionStatus: 'active' as const // Força ACTIVE
-      };
-
       if (editingUser) {
-        // Atualização (apenas Profile)
-        await authService.updateUser({ ...editingUser, ...userData });
+        // Atualização usando o novo subscriberService
+        const updateData = {
+          ...editingUser,
+          name: formData.name,
+          cpf: formData.cpf,
+          eduzzId: formData.eduzzId,
+          subscriptionStatus: formData.subscriptionStatus
+        };
+        await subscriberService.updateSubscriber(updateData);
         addToast('Assinante atualizado com sucesso!', 'success');
       } else {
-        // Criação (Auth -> Profile)
-        // Validação da senha
+        // Criação usando o Hook Blindado (Auth + Profile + Rollback)
         if (!formData.password || formData.password.length < 6) {
            addToast('A senha é obrigatória e deve ter pelo menos 6 caracteres.', 'warning');
            setIsLoading(false);
            return;
         }
 
-        await authService.createUser(userData, formData.password);
+        await createSubscriber({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          cpf: formData.cpf,
+          eduzzId: formData.eduzzId
+        });
+        
         addToast('Novo assinante criado e vinculado com sucesso!', 'success');
       }
       setIsModalOpen(false);
-      loadUsers(); // Recarrega lista
+      loadUsers(); 
     } catch (error: any) {
       addToast(error.message, 'error');
     } finally {
@@ -284,8 +293,8 @@ export const Subscribers: React.FC = () => {
 
            <div className="flex justify-end pt-4">
               <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="mr-2">Cancelar</Button>
-              <Button type="submit" variant="blue" isLoading={isLoading}>
-                 {isLoading ? 'Salvando...' : 'Salvar'}
+              <Button type="submit" variant="blue" isLoading={isLoading || isCreating}>
+                 {isLoading || isCreating ? 'Salvando...' : 'Salvar'}
               </Button>
            </div>
         </form>

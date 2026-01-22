@@ -4,6 +4,7 @@ import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { agendaService } from '../services/agendaService';
+import { useCreateAppointment } from '../services/appointmentService';
 import { authService } from '../services/authService';
 import { Appointment, User as AppUser } from '../types'; 
 import { useToast } from '../contexts/ToastContext';
@@ -13,13 +14,16 @@ export const Agenda: React.FC = () => {
   const [patients, setPatients] = useState<AppUser[]>([]);
   const { addToast } = useToast();
   
+  // Hook de criação
+  const { createAppointment, loading: isCreating } = useCreateAppointment();
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     patientId: '',
     date: '',
     time: '',
-    type: 'Avaliação Inicial' as Appointment['type'], // Default value
+    type: 'Avaliação Inicial' as Appointment['type'], 
     notes: ''
   });
 
@@ -40,7 +44,7 @@ export const Agenda: React.FC = () => {
 
       setAppointments(validAppts);
       
-      // Carrega lista de assinantes (que funcionam como "Alunos" aqui)
+      // Carrega lista de assinantes
       const subs = await authService.getSubscribers();
       setPatients(Array.isArray(subs) ? subs : []);
     } catch (e) {
@@ -52,7 +56,6 @@ export const Agenda: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Busca o objeto completo do usuário/paciente para extrair nome e telefone
     const patient = patients.find(p => p.id === formData.patientId);
     
     if (!patient) {
@@ -60,23 +63,21 @@ export const Agenda: React.FC = () => {
         return;
     }
 
-    // Validação estrita do tipo
     if (!formData.type) {
         addToast('O tipo de sessão é obrigatório.', 'warning');
         return;
     }
 
     try {
-      // Extração de dados para enviar explicitamente (Mirror Operation)
       const patientPhone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
       
-      await agendaService.create({
-        patientId: patient.id, // ID Real (Foreign Key)
-        patientName: patient.name, // Nome explícito
-        patientPhone: patientPhone, // Telefone explícito
+      // Uso do novo hook de criação
+      await createAppointment({
+        patientId: patient.id,
+        patientName: patient.name,
+        patientPhone: patientPhone,
         dateTime: `${formData.date}T${formData.time}:00`,
-        type: formData.type, // Tipo explícito
-        status: 'Agendado',
+        type: formData.type,
         notes: formData.notes
       });
       
@@ -312,7 +313,7 @@ export const Agenda: React.FC = () => {
 
           <div className="flex justify-end pt-4">
             <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="mr-2">Cancelar</Button>
-            <Button type="submit" variant="blue">Confirmar Agendamento</Button>
+            <Button type="submit" variant="blue" isLoading={isCreating}>Confirmar Agendamento</Button>
           </div>
         </form>
       </Modal>

@@ -24,29 +24,22 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   const [hasInitialized, setHasInitialized] = useState(false);
 
   // Acesso seguro à chave API (Prioridade: Settings do Banco > Env Var)
-  // Agora com LOGS DE DIAGNÓSTICO
   const getApiKey = async () => {
     try {
-      console.log("🔍 [Tutor IA] Buscando configurações de integração...");
       const settings = await authService.getIntegrationSettings();
       
       if (settings.gemini?.apiKey && settings.gemini.apiKey.length > 5) {
-        console.log("✅ [Tutor IA] Chave encontrada no Banco de Dados.");
         return settings.gemini.apiKey;
-      } else {
-        console.warn("⚠️ [Tutor IA] Chave NÃO encontrada no Banco (ou está vazia).");
       }
 
       const envKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (envKey) {
-        console.log("✅ [Tutor IA] Chave encontrada no .env (Fallback).");
         return envKey;
       }
 
-      console.error("❌ [Tutor IA] Nenhuma chave API encontrada em lugar nenhum.");
       return '';
     } catch (e) {
-      console.error("❌ [Tutor IA] Erro de conexão ao buscar settings:", e);
+      console.error("Erro ao buscar API Key:", e);
       return '';
     }
   };
@@ -65,7 +58,6 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
   }, [isOpen]);
 
   const initChat = async () => {
-    // Await crucial aqui
     const apiKey = await getApiKey();
     if (!apiKey) {
       setMessages([{ role: 'model', text: 'ERRO DE CONFIGURAÇÃO: Chave API do Google Gemini não encontrada. Por favor, vá em "Integrações" no Painel Admin e configure sua chave.' }]);
@@ -75,8 +67,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
     setIsLoading(true);
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      // CORREÇÃO: Modelo alterado para gemini-pro (v1 compatível)
-      // gemini-1.5-flash requer SDK mais recente ou endpoint v1beta
+      // FIX: Uso do modelo 'gemini-pro' para compatibilidade v1 estável
       const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
       const context = `
@@ -107,14 +98,12 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       
       setMessages(prev => [...prev, { role: 'model', text }]);
     } catch (err: any) {
-      // DIAGNÓSTICO CIRÚRGICO DO ERRO
-      console.error("🛑 [Tutor IA] ERRO CRÍTICO NA INICIALIZAÇÃO:", err);
+      console.error("AiTutor Error:", err);
       
-      let errorMsg = "Erro ao iniciar o Tutor. Verifique a conexão ou a API Key.";
+      let errorMsg = "Erro ao iniciar o Tutor. Tente novamente.";
       
-      if (err.message?.includes('API_KEY_INVALID')) errorMsg = "Erro: A Chave API configurada é inválida ou expirou.";
-      if (err.message?.includes('fetch failed')) errorMsg = "Erro de Conexão: Verifique sua internet ou bloqueadores de anúncio.";
-      if (err.message?.includes('404') || err.message?.includes('not found')) errorMsg = "Erro de Modelo: O sistema tentou acessar uma versão incompatível da IA. O ajuste para 'gemini-pro' deve corrigir.";
+      if (err.message?.includes('API_KEY_INVALID')) errorMsg = "Erro: Chave API inválida.";
+      if (err.message?.includes('404') || err.message?.includes('not found')) errorMsg = "Erro de conexão com o modelo de IA. Verifique se sua API Key tem permissão para o modelo 'gemini-pro'.";
       
       setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
     } finally {
@@ -136,7 +125,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
 
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      // CORREÇÃO: Modelo alterado para gemini-pro
+      // FIX: Uso do modelo 'gemini-pro' para compatibilidade v1 estável
       const model = genAI.getGenerativeModel({ model: "gemini-pro" });
       
       const systemInstruction = `
@@ -157,8 +146,8 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);
       }
     } catch (err: any) {
-      console.error("🛑 [Tutor IA] ERRO NO ENVIO:", err);
-      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação. Verifique o console para detalhes." }]);
+      console.error("AiTutor Response Error:", err);
+      setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação. Tente novamente." }]);
     } finally {
       setIsLoading(false);
     }

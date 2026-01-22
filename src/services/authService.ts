@@ -43,7 +43,7 @@ export const authService = {
     return {
       id: profile.id,
       email: profile.email,
-      name: profile.name,
+      name: profile.name, // Garante uso de 'name'
       // Normalização: Banco (SUBSCRIBER) -> App (SUBSCRIBER)
       role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
@@ -74,7 +74,7 @@ export const authService = {
     return {
       id: profile.id,
       email: profile.email,
-      name: profile.name,
+      name: profile.name, // Garante uso de 'name'
       // Normalização: Banco (SUBSCRIBER) -> App (SUBSCRIBER)
       role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
@@ -87,6 +87,7 @@ export const authService = {
 
   // --- User Management (Admin) ---
 
+  // Método genérico para Admin (traz todos)
   getAllUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase
       .from('profiles')
@@ -101,11 +102,9 @@ export const authService = {
     return data.map((profile: any) => ({
       id: profile.id,
       email: profile.email,
-      name: profile.name,
-      // Normalização de Role
+      name: profile.name, // Correção: name
       role: (profile.role === 'subscriber' ? 'SUBSCRIBER' : profile.role) as Role,
       createdAt: profile.created_at,
-      // Normalização de Status: Garante que 'ACTIVE' vire 'active' para as badges funcionarem
       subscriptionStatus: profile.subscription_status?.toLowerCase(),
       cpf: profile.cpf,
       eduzzId: profile.eduzz_id,
@@ -113,10 +112,34 @@ export const authService = {
     }));
   },
 
+  // Método ESPECÍFICO para Assinantes (Filtro Rígido)
+  getSubscribers: async (): Promise<User[]> => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'SUBSCRIBER') // FILTRO MAIÚSCULO OBRIGATÓRIO
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Erro ao buscar assinantes:', error);
+      return [];
+    }
+
+    return data.map((profile: any) => ({
+      id: profile.id,
+      email: profile.email,
+      name: profile.name, // Correção: name
+      role: 'SUBSCRIBER',
+      createdAt: profile.created_at,
+      subscriptionStatus: profile.subscription_status?.toLowerCase(), // Normaliza para Badge
+      cpf: profile.cpf,
+      eduzzId: profile.eduzz_id,
+      lastPaymentDate: profile.last_payment_date
+    }));
+  },
+
   createUser: async (userData: Partial<User>): Promise<void> => {
-    // Nota: A criação real de Auth requer Service Role Key no backend.
-    
-    const fakeId = generateId(); // ID temporário
+    const fakeId = generateId(); 
     
     const { error } = await supabase.from('profiles').insert([{
       id: fakeId,
@@ -125,7 +148,7 @@ export const authService = {
       role: userData.role || 'SUBSCRIBER',
       cpf: userData.cpf,
       eduzz_id: userData.eduzzId,
-      subscription_status: userData.subscriptionStatus?.toUpperCase() || 'ACTIVE', // Garante gravação em UPPERCASE
+      subscription_status: userData.subscriptionStatus?.toUpperCase() || 'ACTIVE', // Gravação UPPERCASE
       created_at: new Date().toISOString()
     }]);
 
@@ -140,7 +163,7 @@ export const authService = {
         role: user.role,
         cpf: user.cpf,
         eduzz_id: user.eduzzId,
-        subscription_status: user.subscriptionStatus?.toUpperCase() // Garante gravação em UPPERCASE
+        subscription_status: user.subscriptionStatus?.toUpperCase() // Gravação UPPERCASE
       })
       .eq('id', user.id);
 
@@ -160,7 +183,7 @@ export const authService = {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // CORREÇÃO CRÍTICA: Busca por 'SUBSCRIBER' em MAIÚSCULO conforme padrão do banco
+    // CORREÇÃO CRÍTICA: Busca por 'SUBSCRIBER' em MAIÚSCULO
     const { count, error } = await supabase
       .from('profiles')
       .select('*', { count: 'exact', head: true })

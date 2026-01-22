@@ -32,8 +32,8 @@ export const Subscribers: React.FC = () => {
 
   const loadUsers = async () => {
     try {
-      // Await obrigatório pois getAllUsers retorna Promise<User[]>
-      const data = await authService.getAllUsers();
+      // CORREÇÃO: Uso de getSubscribers() para garantir filtro MAIÚSCULO 'SUBSCRIBER'
+      const data = await authService.getSubscribers();
       if (Array.isArray(data)) {
         setUsers(data);
       } else {
@@ -88,11 +88,9 @@ export const Subscribers: React.FC = () => {
       };
 
       if (editingUser) {
-        // Await necessário para update
         await authService.updateUser({ ...editingUser, ...userData });
         addToast('Assinante atualizado com sucesso!', 'success');
       } else {
-        // Await necessário para create
         await authService.createUser(userData);
         addToast('Assinante criado com sucesso!', 'success');
       }

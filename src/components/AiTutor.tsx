@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Patient } from '../types';
 import { X, Send, Bot, Sparkles } from 'lucide-react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { authService } from '../services/authService';
 
 interface AiTutorProps {
@@ -29,12 +29,12 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
       const settings = await authService.getIntegrationSettings();
       
       if (settings.gemini?.apiKey && settings.gemini.apiKey.length > 5) {
-        return settings.gemini.apiKey;
+        return settings.gemini.apiKey.trim();
       }
 
       const envKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (envKey) {
-        return envKey;
+        return envKey.trim();
       }
 
       return '';
@@ -66,10 +66,9 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
 
     setIsLoading(true);
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      // FIX: Uso do modelo 'gemini-pro' para compatibilidade v1 estável
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-
+      // Inicialização usando a nova SDK @google/genai
+      const ai = new GoogleGenAI({ apiKey });
+      
       const context = `
         PACIENTE ATUAL:
         Nome: ${patient.name}
@@ -92,18 +91,23 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         ${context}
       `;
       
-      const result = await model.generateContent(initialPrompt);
-      const response = await result.response;
-      const text = response.text();
-      
-      setMessages(prev => [...prev, { role: 'model', text }]);
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: initialPrompt
+      });
+
+      const text = response.text;
+      if (text) {
+        setMessages(prev => [...prev, { role: 'model', text }]);
+      }
     } catch (err: any) {
-      console.error("AiTutor Error:", err);
+      console.error("🚨 [Tutor IA] ERRO CRÍTICO GEMINI 2.0:", err);
       
-      let errorMsg = "Erro ao iniciar o Tutor. Tente novamente.";
+      let errorMsg = "Erro ao iniciar o Tutor. Verifique o console para detalhes técnicos.";
       
       if (err.message?.includes('API_KEY_INVALID')) errorMsg = "Erro: Chave API inválida.";
-      if (err.message?.includes('404') || err.message?.includes('not found')) errorMsg = "Erro de conexão com o modelo de IA. Verifique se sua API Key tem permissão para o modelo 'gemini-pro'.";
+      else if (err.message?.includes('location')) errorMsg = "Erro: Região não suportada ou Geo-block ativo.";
+      else if (err.message?.includes('permission')) errorMsg = "Erro de Permissão: Verifique se sua chave tem acesso ao Gemini 2.0.";
       
       setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
     } finally {
@@ -124,9 +128,7 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
     setError(null);
 
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      // FIX: Uso do modelo 'gemini-pro' para compatibilidade v1 estável
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const ai = new GoogleGenAI({ apiKey });
       
       const systemInstruction = `
         Você é o SeniorFit AI Tutor. Ajude o treinador a interpretar os resultados e sugira condutas práticas. 
@@ -136,17 +138,17 @@ export const AiTutor: React.FC<AiTutorProps> = ({ patient, isOpen, onClose }) =>
         Responda sempre em Português do Brasil.
       `;
 
-      const promptToSend = `${systemInstruction}\n\nTreinador pergunta: ${text}`;
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: `${systemInstruction}\n\nTreinador pergunta: ${text}`
+      });
 
-      const result = await model.generateContent(promptToSend);
-      const response = await result.response;
-      const responseText = response.text();
-      
+      const responseText = response.text;
       if (responseText) {
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);
       }
     } catch (err: any) {
-      console.error("AiTutor Response Error:", err);
+      console.error("🚨 [Tutor IA] ERRO NA RESPOSTA 2.0:", err);
       setMessages(prev => [...prev, { role: 'model', text: "Erro ao processar solicitação. Tente novamente." }]);
     } finally {
       setIsLoading(false);

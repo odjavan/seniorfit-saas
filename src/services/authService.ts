@@ -129,10 +129,13 @@ export const authService = {
     }));
   },
 
-  createUser: async (userData: Partial<User>): Promise<void> => {
+  // CORREÇÃO: Adicionado parâmetro password opcional
+  createUser: async (userData: Partial<User>, password?: string): Promise<void> => {
+    // 1. Cria usuário no Auth (Provider Identity)
+    // Usamos signUp do lado do cliente. Se fosse server-side, usaríamos admin.createUser
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: userData.email!,
-      password: '123456',
+      password: password || '123456', // Usa a senha fornecida ou fallback
       options: {
         data: {
           name: userData.name
@@ -143,10 +146,11 @@ export const authService = {
     if (authError) throw new Error("Erro no Auth (SignUp): " + authError.message);
     if (!authData.user) throw new Error("Erro: Usuário não criado no Auth.");
 
+    // 2. Garante que temos o ID antes de inserir no Public Profiles
     const userId = authData.user.id;
 
     const { error: profileError } = await supabase.from('profiles').insert([{
-      id: userId,
+      id: userId, // Constraint Foreign Key: Este ID deve existir em auth.users
       email: userData.email,
       name: userData.name,
       role: (userData.role || 'SUBSCRIBER').toUpperCase(),
@@ -158,6 +162,7 @@ export const authService = {
 
     if (profileError) {
       console.error("Erro ao criar perfil:", profileError);
+      // Se falhar o perfil, idealmente deveríamos limpar o Auth, mas vamos apenas reportar por enquanto
       throw new Error("Erro ao criar perfil no banco: " + profileError.message);
     }
   },
@@ -204,7 +209,6 @@ export const authService = {
 
   getSettings: async (): Promise<SystemSettings> => {
     try {
-      // CORREÇÃO: Busca a primeira linha disponível sem filtrar por ID fixo
       const { data } = await supabase
         .from('system_settings')
         .select('video_url')
@@ -232,7 +236,6 @@ export const authService = {
   // --- Integrations ---
 
   getIntegrationSettings: async (): Promise<IntegrationSettings> => {
-    // CORREÇÃO: Removemos .eq('id', SYSTEM_SETTINGS_ID) para evitar erro 400 se o ID não existir
     const { data, error } = await supabase
       .from('system_settings')
       .select('*')

@@ -4,7 +4,7 @@ import { authService } from '../services/authService';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
-import { Search, Plus, MoreVertical, Edit, Shield } from 'lucide-react';
+import { Search, Plus, MoreVertical, Edit, Shield, Lock } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 
 export const Subscribers: React.FC = () => {
@@ -20,6 +20,7 @@ export const Subscribers: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '', // Novo campo de senha
     role: 'SUBSCRIBER' as Role,
     cpf: '',
     eduzzId: '',
@@ -32,7 +33,6 @@ export const Subscribers: React.FC = () => {
 
   const loadUsers = async () => {
     try {
-      // CORREÇÃO: Uso de getSubscribers() para garantir filtro MAIÚSCULO 'SUBSCRIBER'
       const data = await authService.getSubscribers();
       if (Array.isArray(data)) {
         setUsers(data);
@@ -56,6 +56,7 @@ export const Subscribers: React.FC = () => {
       setFormData({
         name: user.name,
         email: user.email,
+        password: '', // Senha vazia na edição (não alteramos senha por aqui normalmente)
         role: user.role,
         cpf: user.cpf || '',
         eduzzId: user.eduzzId || '',
@@ -66,6 +67,7 @@ export const Subscribers: React.FC = () => {
       setFormData({
         name: '',
         email: '',
+        password: '',
         role: 'SUBSCRIBER',
         cpf: '',
         eduzzId: '',
@@ -91,7 +93,12 @@ export const Subscribers: React.FC = () => {
         await authService.updateUser({ ...editingUser, ...userData });
         addToast('Assinante atualizado com sucesso!', 'success');
       } else {
-        await authService.createUser(userData);
+        // Validação de senha na criação
+        if (!formData.password || formData.password.length < 6) {
+           addToast('A senha deve ter pelo menos 6 caracteres.', 'warning');
+           return;
+        }
+        await authService.createUser(userData, formData.password);
         addToast('Assinante criado com sucesso!', 'success');
       }
       setIsModalOpen(false);
@@ -102,7 +109,6 @@ export const Subscribers: React.FC = () => {
   };
 
   const getStatusBadge = (status?: string) => {
-    // CORREÇÃO: Normaliza para lowercase para garantir match com 'ACTIVE' ou 'active'
     const s = status?.toLowerCase();
     switch(s) {
       case 'active': return <span className="px-2 py-1 text-xs font-bold rounded-full bg-green-100 text-green-800">ATIVO</span>;
@@ -219,6 +225,20 @@ export const Subscribers: React.FC = () => {
              disabled={!!editingUser}
            />
            
+           {!editingUser && (
+              <div className="relative">
+                <Input 
+                  label="Senha de Acesso" 
+                  type="password" 
+                  value={formData.password} 
+                  onChange={e => setFormData({...formData, password: e.target.value})} 
+                  placeholder="Mínimo 6 caracteres"
+                  required 
+                />
+                <Lock size={16} className="absolute right-3 top-[34px] text-gray-400" />
+              </div>
+           )}
+
            <div className="grid grid-cols-2 gap-4">
              <Input 
                label="CPF" 
@@ -259,12 +279,6 @@ export const Subscribers: React.FC = () => {
                </select>
              </div>
            </div>
-
-           {!editingUser && (
-             <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-               Senha padrão gerada automaticamente: <strong>123456</strong>
-             </div>
-           )}
 
            <div className="flex justify-end pt-4">
               <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)} className="mr-2">Cancelar</Button>

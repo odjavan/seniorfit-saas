@@ -55,7 +55,7 @@ export const agendaService = {
       date_time: appointment.dateTime,
       type: appointment.type,
       status: appointment.status,
-      notes: appointment.notes
+      notes: appointment.notes || '' // Garante string vazia se undefined
     };
 
     const { data, error } = await supabase

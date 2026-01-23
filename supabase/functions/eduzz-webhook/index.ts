@@ -266,6 +266,7 @@ serve(async (req) => {
       
       console.log('⚙️ Buscando configurações de EmailJS...')
 
+      // ATUALIZAÇÃO CRÍTICA: Incluímos 'emailjs_private_key' na query
       const { data: settings } = await supabase
         .from('system_settings')
         .select('emailjs_service_id, emailjs_public_key, emailjs_private_key, emailjs_template_welcome, app_url')
@@ -287,11 +288,12 @@ serve(async (req) => {
         try {
           console.log('📧 Enviando email de boas-vindas...')
 
+          // ATUALIZAÇÃO CRÍTICA: Adicionado accessToken (Private Key)
           const emailPayload = {
             service_id: settings.emailjs_service_id,
             template_id: settings.emailjs_template_welcome,
             user_id: settings.emailjs_public_key,
-            accessToken: settings.emailjs_private_key, // 🎯 CHAVE PRIVADA PARA ENVIO SERVER-SIDE
+            accessToken: settings.emailjs_private_key, // 🎯 OBRIGATÓRIO PARA SERVER-SIDE
             template_params: {
               to_email: email,
               to_name: name,
@@ -301,7 +303,6 @@ serve(async (req) => {
             }
           }
 
-          // Nota: Não logamos o payload inteiro aqui para não vazar a Private Key nos logs
           console.log('📤 Enviando requisição para EmailJS API...')
 
           const emailResponse = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
@@ -315,8 +316,12 @@ serve(async (req) => {
           if (emailResponse.ok) {
             console.log('✅ Email enviado com sucesso!')
           } else {
+            // ATUALIZAÇÃO CRÍTICA: Logs detalhados em caso de erro
             const errorText = await emailResponse.text()
-            console.error('❌ Erro ao enviar email:', emailResponse.status, errorText)
+            console.error('❌ Erro API EmailJS:')
+            console.error('   Status:', emailResponse.status)
+            console.error('   StatusText:', emailResponse.statusText)
+            console.error('   Body:', errorText)
           }
 
         } catch (emailError) {

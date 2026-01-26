@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, User as UserIcon, Calendar, Scale, Ruler, Activity, CheckCircle2, MessageCircle, Edit, Trash2, LayoutGrid, List } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Search, User as UserIcon, Calendar, Activity, CheckCircle2, MessageCircle, Edit, Trash2, LayoutGrid, List, RefreshCw } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
@@ -41,9 +41,25 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
     bmi: 0
   });
 
+  // Função de carregamento memorizada para evitar recriação
+  const loadPatients = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await patientService.getAll();
+      setPatients(data);
+    } catch (error) {
+      console.error("Erro ao carregar pacientes", error);
+      addToast("Erro ao carregar lista de alunos.", "error");
+      setPatients([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [addToast]);
+
+  // Effect para carregar dados ao montar o componente
   useEffect(() => {
     loadPatients();
-  }, []);
+  }, [loadPatients]);
 
   // Update calculations in real-time when relevant fields change
   useEffect(() => {
@@ -73,22 +89,16 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
     setComputed({ age: Math.max(0, age), bmi });
   }, [formData.birthDate, formData.weight, formData.height]);
 
-  const loadPatients = async () => {
-    setIsLoading(true);
-    try {
-      const data = await patientService.getAll();
-      setPatients(data);
-    } catch (error) {
-      console.error("Erro ao carregar pacientes", error);
-      setPatients([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const term = e.target.value;
     setSearchTerm(term);
+    
+    // Debounce manual simples ou carregamento imediato se vazio
+    if (term === '') {
+      loadPatients();
+      return;
+    }
+
     setIsLoading(true);
     try {
       const data = await patientService.search(term);
@@ -106,7 +116,6 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
     try {
       if (editingPatient) {
         // Update Logic (Async)
-        // A função update agora recebe o ID implicitamente via objeto patient
         await patientService.update({
           ...editingPatient,
           name: formData.name,
@@ -220,6 +229,9 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
                 <List size={20} />
              </button>
            </div>
+           <Button onClick={() => loadPatients()} variant="outline" title="Recarregar Lista">
+             <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
+           </Button>
            <Button onClick={() => openModal()} variant="blue">
              <Plus size={20} className="mr-2" /> Novo Aluno
            </Button>
@@ -243,7 +255,10 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
       {/* Loading State */}
       {isLoading ? (
          <div className="flex justify-center items-center h-64">
-           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+           <div className="flex flex-col items-center">
+             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4"></div>
+             <p className="text-gray-500">Carregando alunos...</p>
+           </div>
          </div>
       ) : (
         <>
@@ -252,8 +267,8 @@ export const Patients: React.FC<PatientsProps> = ({ onSelectPatient }) => {
               <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
                 <UserIcon size={48} />
               </div>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum aluno cadastrado</h3>
-              <p className="mt-1 text-sm text-gray-500">Comece adicionando um novo aluno ao sistema.</p>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum aluno encontrado</h3>
+              <p className="mt-1 text-sm text-gray-500">Cadastre um novo aluno ou tente outra busca.</p>
               <div className="mt-6">
                 <Button onClick={() => openModal()} variant="blue">
                   <Plus size={20} className="mr-2" /> Novo Aluno

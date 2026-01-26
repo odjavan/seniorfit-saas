@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, AlertCircle, CheckCircle2, UserCheck, Scale, Brain, 
   Heart, Activity, Move, Dumbbell, TrendingUp, ChevronLeft, ClipboardList,
-  Timer, Play, Pause, RotateCcw, Minus, Plus, Printer, Bot, Sparkles, MessageCircle, FileText
+  Timer, Play, Pause, RotateCcw, Minus, Plus, Printer, Bot, Sparkles, MessageCircle, FileText, Lock
 } from 'lucide-react';
 import { Patient, Screening, TestStatus, FragilityResult, TUGResult, ChairStandResult, ArmCurlResult, FlexibilityResult, DepressionResult, CognitiveResult, BalanceResult, AssessmentHistoryEntry } from '../types';
 import { Button } from '../components/Button';
@@ -56,6 +56,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   
   const [activeTestId, setActiveTestId] = useState<string | null>(null);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false); // Novo Estado: Modo Leitura
   
   // Report Modal
   const [reportModalOpen, setReportModalOpen] = useState(false);
@@ -120,7 +121,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
 
   // --- Stopwatch Logic (TUG) ---
   const startTimer = () => {
-    if (isTimerRunning) return;
+    if (isTimerRunning || isReadOnly) return;
     setIsTimerRunning(true);
     startTimeRef.current = Date.now() - elapsedTimeRef.current;
     timerRef.current = window.setInterval(() => {
@@ -139,6 +140,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   };
 
   const resetTimer = () => {
+    if (isReadOnly) return;
     stopTimer();
     elapsedTimeRef.current = 0;
     setTugTime('');
@@ -146,7 +148,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
 
   // --- Countdown Logic (Chair Stand & Arm Curl) ---
   const startCountdown = () => {
-    if (isCountdownRunning || timeLeft <= 0) return;
+    if (isCountdownRunning || timeLeft <= 0 || isReadOnly) return;
     
     setIsCountdownRunning(true);
     countdownIntervalRef.current = window.setInterval(() => {
@@ -169,6 +171,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   };
 
   const resetCountdown = () => {
+    if (isReadOnly) return;
     stopCountdown();
     setTimeLeft(30);
   };
@@ -192,7 +195,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
     { id: 'berg_balance', name: 'Equilíbrio (Berg)', desc: 'Avaliação do equilíbrio estático e dinâmico', icon: Scale },
   ];
 
-  // --- Protocol Descriptions (RESTAURADO) ---
+  // --- Protocol Descriptions ---
   const getProtocolInstructions = (testId: string | null) => {
     switch(testId) {
       case 'fried': return "Avalie 5 componentes: 1) Perda de peso não intencional (>4.5kg no último ano); 2) Exaustão autorrelatada; 3) Baixo nível de atividade física; 4) Diminuição da velocidade de marcha (4.6m); 5) Fraqueza muscular (Dinapometria).";
@@ -210,6 +213,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   // --- Triage Logic ---
 
   const handleToggle = (key: keyof Screening, value: boolean) => {
+    if (isReadOnly) return;
     setScreening(prev => ({ ...prev, [key]: value }));
   };
 
@@ -238,7 +242,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
     }
   };
 
-  // --- Test Selection Logic ---
+  // --- Test Selection & Hydration Logic ---
 
   const getTestStatus = (testId: string): TestStatus['status'] => {
     return patient.tests?.find(t => t.testId === testId)?.status || 'pending';
@@ -246,6 +250,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
 
   const startTest = (testId: string) => {
     setActiveTestId(testId);
+    setIsReadOnly(false); // Reset Read Only Mode
+    
+    // Reset inputs for new test
     if (testId === 'fried') {
       setFriedData({
         weightLoss: null,
@@ -254,43 +261,77 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
         gripStrengthKg: '',
         gaitSpeedTime: ''
       });
-      setViewMode('execution');
     } else if (testId === 'tug') {
       setTugTime('');
       elapsedTimeRef.current = 0;
-      setViewMode('execution');
     } else if (testId === 'sit_stand_30') {
       setChairStandReps('');
       setTimeLeft(30);
-      setViewMode('execution');
     } else if (testId === 'arm_curl') {
       setArmCurlReps('');
       setTimeLeft(30);
-      setViewMode('execution');
     } else if (testId === 'sit_reach') {
       setSitReachDist('');
-      setViewMode('execution');
     } else if (testId === 'gds15') {
       setGdsAnswers(new Array(15).fill(null));
-      setViewMode('execution');
     } else if (testId === 'meem_cognitive') {
-      setMeemData({
-        orientation: 0,
-        registration: 0,
-        attention: 0,
-        recall: 0,
-        language: 0
-      });
-      if (patient.educationLevel) {
-        setEducationLevel(patient.educationLevel);
-      }
-      setViewMode('execution');
+      setMeemData({ orientation: 0, registration: 0, attention: 0, recall: 0, language: 0 });
+      if (patient.educationLevel) setEducationLevel(patient.educationLevel);
     } else if (testId === 'berg_balance') {
       setBergScores(new Array(14).fill(0));
-      setViewMode('execution');
     } else {
       addToast('Este teste será implementado nas próximas etapas.', 'info');
+      return;
     }
+    setViewMode('execution');
+  };
+
+  // NOVA FUNÇÃO: Visualizar Resultados (Hidratação)
+  const viewTestResults = (testId: string) => {
+    const testEntry = patient.tests?.find(t => t.testId === testId);
+    if (!testEntry || !testEntry.result) return;
+
+    const res = testEntry.result;
+    setIsReadOnly(true); // Ativa modo leitura
+    setActiveTestId(testId);
+
+    // Hidrata o estado com base no testId
+    if (testId === 'fried') {
+      const fRes = res as FragilityResult;
+      setFriedData({
+        weightLoss: fRes.scores?.weightLoss === 1,
+        fatigue: fRes.scores?.fatigue === 1,
+        physicalActivity: fRes.scores?.physicalActivity === 1,
+        gripStrengthKg: String(fRes.measurements?.gripStrengthKg || ''),
+        gaitSpeedTime: String(fRes.measurements?.gaitSpeedTime || '')
+      });
+    } else if (testId === 'tug') {
+      const tRes = res as TUGResult;
+      setTugTime(String(tRes.timeSeconds));
+    } else if (testId === 'sit_stand_30') {
+      const cRes = res as ChairStandResult;
+      setChairStandReps(String(cRes.repetitions));
+    } else if (testId === 'arm_curl') {
+      const aRes = res as ArmCurlResult;
+      setArmCurlReps(String(aRes.repetitions));
+    } else if (testId === 'sit_reach') {
+      const sRes = res as FlexibilityResult;
+      setSitReachDist(String(sRes.distanceCm));
+    } else if (testId === 'gds15') {
+      const gRes = res as DepressionResult;
+      if (gRes.answers && Array.isArray(gRes.answers)) {
+        setGdsAnswers(gRes.answers);
+      }
+    } else if (testId === 'meem_cognitive') {
+      const mRes = res as CognitiveResult;
+      if (mRes.scores) setMeemData(mRes.scores);
+      if (mRes.educationLevel) setEducationLevel(mRes.educationLevel);
+    } else if (testId === 'berg_balance') {
+      const bRes = res as BalanceResult;
+      if (bRes.itemScores) setBergScores(bRes.itemScores);
+    }
+
+    setViewMode('execution');
   };
 
   // --- Helper: Save Result ---
@@ -487,6 +528,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   };
 
   const handleGdsAnswer = (index: number, answer: boolean) => {
+    if (isReadOnly) return;
     const newAnswers = [...gdsAnswers];
     newAnswers[index] = answer;
     setGdsAnswers(newAnswers);
@@ -532,6 +574,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   };
 
   const handleMeemChange = (key: keyof typeof meemData, delta: number, max: number) => {
+    if (isReadOnly) return;
     setMeemData(prev => ({
       ...prev,
       [key]: Math.min(Math.max(0, prev[key] + delta), max)
@@ -580,6 +623,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   ];
 
   const handleBergScoreChange = (index: number, score: number) => {
+    if (isReadOnly) return;
     const newScores = [...bergScores];
     newScores[index] = score;
     setBergScores(newScores);
@@ -758,7 +802,21 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                   </div>
                   <h3 className="text-lg font-bold text-gray-900 mb-2 leading-tight">{test.name}</h3>
                   {classificationDisplay ? classificationDisplay : (<p className="text-sm text-gray-600 mb-6 flex-grow">{test.desc}</p>)}
-                  <Button variant="outline" fullWidth className={status === 'completed' ? '' : "group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600"} onClick={() => startTest(test.id)}>{status === 'completed' ? 'REFAZER AVALIAÇÃO' : 'INICIAR AVALIAÇÃO'}</Button>
+                  
+                  {status === 'completed' ? (
+                     <div className="grid grid-cols-2 gap-2 mt-auto">
+                        <Button variant="outline" fullWidth onClick={() => viewTestResults(test.id)} className="border-blue-200 text-blue-700 hover:bg-blue-50">
+                          Ver Resultados
+                        </Button>
+                        <button onClick={() => startTest(test.id)} className="text-xs font-medium text-gray-400 hover:text-blue-600 hover:underline">
+                          Refazer
+                        </button>
+                     </div>
+                  ) : (
+                    <Button variant="outline" fullWidth className="group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 mt-auto" onClick={() => startTest(test.id)}>
+                      INICIAR AVALIAÇÃO
+                    </Button>
+                  )}
                 </div>
               );
             })}
@@ -771,7 +829,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <button onClick={() => setViewMode('tests')} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"><ChevronLeft size={20} className="mr-1" /> Voltar para Seleção</button>
-            <Button variant="outline" onClick={() => setShowProtocolModal(true)} className="flex items-center gap-2 border-gray-300 shadow-sm"><FileText size={18} /> INSTRUÇÕES DO TESTE</Button>
+            <div className="flex gap-2">
+               {isReadOnly && (
+                 <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-bold border border-yellow-200">
+                    <Lock size={12} className="mr-1" /> MODO LEITURA
+                 </span>
+               )}
+               <Button variant="outline" onClick={() => setShowProtocolModal(true)} className="flex items-center gap-2 border-gray-300 shadow-sm"><FileText size={18} /> INSTRUÇÕES</Button>
+            </div>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -793,8 +858,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                       <div key={q.key} className="flex justify-between items-center bg-gray-50 p-4 rounded-lg">
                         <span className="font-medium text-gray-900">{q.label}</span>
                         <div className="flex gap-2">
-                          <button onClick={() => setFriedData({...friedData, [q.key]: false})} className={`px-4 py-2 rounded-md font-bold border ${friedData[q.key as keyof typeof friedData] === false ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200'}`}>NÃO</button>
-                          <button onClick={() => setFriedData({...friedData, [q.key]: true})} className={`px-4 py-2 rounded-md font-bold border ${friedData[q.key as keyof typeof friedData] === true ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-500 border-gray-200'}`}>SIM</button>
+                          <button disabled={isReadOnly} onClick={() => setFriedData({...friedData, [q.key]: false})} className={`px-4 py-2 rounded-md font-bold border ${friedData[q.key as keyof typeof friedData] === false ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200'} ${isReadOnly ? 'opacity-70 cursor-not-allowed' : ''}`}>NÃO</button>
+                          <button disabled={isReadOnly} onClick={() => setFriedData({...friedData, [q.key]: true})} className={`px-4 py-2 rounded-md font-bold border ${friedData[q.key as keyof typeof friedData] === true ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-500 border-gray-200'} ${isReadOnly ? 'opacity-70 cursor-not-allowed' : ''}`}>SIM</button>
                         </div>
                       </div>
                     ))}
@@ -802,15 +867,15 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <label className="block font-medium text-gray-900 mb-2">4. Força de Preensão (kg)</label>
-                        <Input label="" type="number" placeholder="0.0" value={friedData.gripStrengthKg} onChange={(e) => setFriedData({...friedData, gripStrengthKg: e.target.value})} />
+                        <Input disabled={isReadOnly} label="" type="number" placeholder="0.0" value={friedData.gripStrengthKg} onChange={(e) => setFriedData({...friedData, gripStrengthKg: e.target.value})} />
                       </div>
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <label className="block font-medium text-gray-900 mb-2">5. Tempo de Marcha 4.6m (s)</label>
-                        <Input label="" type="number" placeholder="0.0" value={friedData.gaitSpeedTime} onChange={(e) => setFriedData({...friedData, gaitSpeedTime: e.target.value})} />
+                        <Input disabled={isReadOnly} label="" type="number" placeholder="0.0" value={friedData.gaitSpeedTime} onChange={(e) => setFriedData({...friedData, gaitSpeedTime: e.target.value})} />
                       </div>
                     </div>
                   </div>
-                  <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveFried} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>
+                  {!isReadOnly && <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveFried} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>}
                 </>
               )}
               {/* TUG UI */}
@@ -822,27 +887,29 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                       <span className="text-xl text-gray-500 ml-2">s</span>
                     </div>
                     
-                    <div className="flex gap-4">
-                      {!isTimerRunning ? (
-                        <button onClick={startTimer} className="flex items-center px-8 py-4 bg-green-600 text-white rounded-full font-bold text-lg hover:bg-green-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1">
-                          <Play size={24} className="mr-2" /> INICIAR
+                    {!isReadOnly && (
+                      <div className="flex gap-4">
+                        {!isTimerRunning ? (
+                          <button onClick={startTimer} className="flex items-center px-8 py-4 bg-green-600 text-white rounded-full font-bold text-lg hover:bg-green-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+                            <Play size={24} className="mr-2" /> INICIAR
+                          </button>
+                        ) : (
+                          <button onClick={stopTimer} className="flex items-center px-8 py-4 bg-red-600 text-white rounded-full font-bold text-lg hover:bg-red-700 transition-all shadow-lg">
+                            <Pause size={24} className="mr-2" /> PARAR
+                          </button>
+                        )}
+                        <button onClick={resetTimer} className="flex items-center px-4 py-4 bg-gray-200 text-gray-700 rounded-full font-bold hover:bg-gray-300 transition-colors">
+                          <RotateCcw size={24} />
                         </button>
-                      ) : (
-                        <button onClick={stopTimer} className="flex items-center px-8 py-4 bg-red-600 text-white rounded-full font-bold text-lg hover:bg-red-700 transition-all shadow-lg">
-                          <Pause size={24} className="mr-2" /> PARAR
-                        </button>
-                      )}
-                      <button onClick={resetTimer} className="flex items-center px-4 py-4 bg-gray-200 text-gray-700 rounded-full font-bold hover:bg-gray-300 transition-colors">
-                        <RotateCcw size={24} />
-                      </button>
-                    </div>
+                      </div>
+                    )}
 
                     <div className="w-full max-w-xs mt-8">
                       <label className="block text-center text-sm font-medium text-gray-500 mb-2">Inserção Manual</label>
-                      <Input label="" type="number" step="0.01" className="text-center text-lg" placeholder="0.00" value={tugTime} onChange={(e) => setTugTime(e.target.value)} />
+                      <Input disabled={isReadOnly} label="" type="number" step="0.01" className="text-center text-lg" placeholder="0.00" value={tugTime} onChange={(e) => setTugTime(e.target.value)} />
                     </div>
                   </div>
-                  <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveTUG} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>
+                  {!isReadOnly && <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveTUG} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>}
                 </>
               )}
 
@@ -855,41 +922,44 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                       <div className="absolute -bottom-6 left-0 right-0 text-center text-sm text-gray-500">segundos</div>
                     </div>
 
-                    <div className="flex gap-4">
-                      {!isCountdownRunning ? (
-                        <button onClick={startCountdown} className="flex items-center px-8 py-4 bg-green-600 text-white rounded-full font-bold text-lg hover:bg-green-700 transition-all shadow-lg">
-                          <Play size={24} className="mr-2" /> INICIAR 30s
+                    {!isReadOnly && (
+                      <div className="flex gap-4">
+                        {!isCountdownRunning ? (
+                          <button onClick={startCountdown} className="flex items-center px-8 py-4 bg-green-600 text-white rounded-full font-bold text-lg hover:bg-green-700 transition-all shadow-lg">
+                            <Play size={24} className="mr-2" /> INICIAR 30s
+                          </button>
+                        ) : (
+                          <button onClick={stopCountdown} className="flex items-center px-8 py-4 bg-red-600 text-white rounded-full font-bold text-lg hover:bg-red-700 transition-all shadow-lg">
+                            <Pause size={24} className="mr-2" /> PAUSAR
+                          </button>
+                        )}
+                        <button onClick={resetCountdown} className="flex items-center px-4 py-4 bg-gray-200 text-gray-700 rounded-full font-bold hover:bg-gray-300 transition-colors">
+                          <RotateCcw size={24} />
                         </button>
-                      ) : (
-                        <button onClick={stopCountdown} className="flex items-center px-8 py-4 bg-red-600 text-white rounded-full font-bold text-lg hover:bg-red-700 transition-all shadow-lg">
-                          <Pause size={24} className="mr-2" /> PAUSAR
-                        </button>
-                      )}
-                      <button onClick={resetCountdown} className="flex items-center px-4 py-4 bg-gray-200 text-gray-700 rounded-full font-bold hover:bg-gray-300 transition-colors">
-                        <RotateCcw size={24} />
-                      </button>
-                    </div>
+                      </div>
+                    )}
 
                     <div className="w-full max-w-xs bg-blue-50 p-6 rounded-xl border border-blue-100">
                       <label className="block text-center font-bold text-blue-900 mb-2">
                         Repetições Realizadas
                       </label>
                       <Input 
+                        disabled={isReadOnly}
                         label="" 
                         type="number" 
                         className="text-center text-2xl font-bold" 
                         placeholder="0" 
                         value={activeTestId === 'sit_stand_30' ? chairStandReps : armCurlReps} 
                         onChange={(e) => activeTestId === 'sit_stand_30' ? setChairStandReps(e.target.value) : setArmCurlReps(e.target.value)} 
-                        autoFocus
+                        autoFocus={!isReadOnly}
                       />
                     </div>
                   </div>
-                  <div className="flex justify-end pt-4">
+                  {!isReadOnly && <div className="flex justify-end pt-4">
                     <Button variant="blue" onClick={activeTestId === 'sit_stand_30' ? handleSaveChairStand : handleSaveArmCurl} className="px-8 py-3 text-lg">
                       SALVAR AVALIAÇÃO
                     </Button>
-                  </div>
+                  </div>}
                 </>
               )}
 
@@ -905,8 +975,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                         Use valores negativos (-) se não alcançar a ponta do pé, e positivos (+) se ultrapassar.
                       </p>
                       <div className="flex items-center justify-center gap-4">
-                        <button onClick={() => setSitReachDist((prev) => String((parseFloat(prev || '0') - 1).toFixed(1)))} className="p-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-100"><Minus size={20} /></button>
+                        {!isReadOnly && <button onClick={() => setSitReachDist((prev) => String((parseFloat(prev || '0') - 1).toFixed(1)))} className="p-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-100"><Minus size={20} /></button>}
                         <Input 
+                          disabled={isReadOnly}
                           label="" 
                           type="number" 
                           step="0.5" 
@@ -915,11 +986,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                           value={sitReachDist} 
                           onChange={(e) => setSitReachDist(e.target.value)} 
                         />
-                        <button onClick={() => setSitReachDist((prev) => String((parseFloat(prev || '0') + 1).toFixed(1)))} className="p-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-100"><Plus size={20} /></button>
+                        {!isReadOnly && <button onClick={() => setSitReachDist((prev) => String((parseFloat(prev || '0') + 1).toFixed(1)))} className="p-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-100"><Plus size={20} /></button>}
                       </div>
                     </div>
                   </div>
-                  <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveSitReach} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>
+                  {!isReadOnly && <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveSitReach} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>}
                 </>
               )}
 
@@ -947,13 +1018,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                       <div key={q.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
                         <span className="font-medium text-gray-900 text-sm flex-1 mr-4">{q.text}</span>
                         <div className="flex gap-2 min-w-[120px]">
-                          <button onClick={() => handleGdsAnswer(idx, true)} className={`flex-1 py-1.5 px-3 rounded text-xs font-bold border transition-colors ${gdsAnswers[idx] === true ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>SIM</button>
-                          <button onClick={() => handleGdsAnswer(idx, false)} className={`flex-1 py-1.5 px-3 rounded text-xs font-bold border transition-colors ${gdsAnswers[idx] === false ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'}`}>NÃO</button>
+                          <button disabled={isReadOnly} onClick={() => handleGdsAnswer(idx, true)} className={`flex-1 py-1.5 px-3 rounded text-xs font-bold border transition-colors ${gdsAnswers[idx] === true ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'} ${isReadOnly ? 'opacity-70' : ''}`}>SIM</button>
+                          <button disabled={isReadOnly} onClick={() => handleGdsAnswer(idx, false)} className={`flex-1 py-1.5 px-3 rounded text-xs font-bold border transition-colors ${gdsAnswers[idx] === false ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200'} ${isReadOnly ? 'opacity-70' : ''}`}>NÃO</button>
                         </div>
                       </div>
                     ))}
                   </div>
-                  <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveGDS15} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>
+                  {!isReadOnly && <div className="flex justify-end pt-4"><Button variant="blue" onClick={handleSaveGDS15} className="px-8 py-3 text-lg">SALVAR AVALIAÇÃO</Button></div>}
                 </>
               )}
 
@@ -962,7 +1033,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                 <>
                   <div className="bg-blue-50 p-5 rounded-lg border border-blue-100 mb-6">
                      <h3 className="text-lg font-bold text-blue-900 mb-2">1. Escolaridade do Aluno</h3>
-                     <select className="w-full rounded-md border-blue-200 focus:border-blue-500 focus:ring focus:ring-blue-200 py-3 text-base" value={educationLevel} onChange={(e) => setEducationLevel(e.target.value as any)}>
+                     <select disabled={isReadOnly} className="w-full rounded-md border-blue-200 focus:border-blue-500 focus:ring focus:ring-blue-200 py-3 text-base" value={educationLevel} onChange={(e) => setEducationLevel(e.target.value as any)}>
                        <option value="" disabled>Selecione a escolaridade...</option>
                        <option value="analfabeto">Analfabeto (Corte: 20)</option>
                        <option value="1-4">1 a 4 anos (Corte: 25)</option>
@@ -984,9 +1055,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                          <div className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
                             <p className="text-sm text-gray-600 max-w-[70%]">{section.desc}</p>
                             <div className="flex items-center gap-4">
-                              <button onClick={() => handleMeemChange(section.key as any, -1, section.max)} className="w-10 h-10 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100"><Minus size={16} /></button>
+                              <button disabled={isReadOnly} onClick={() => handleMeemChange(section.key as any, -1, section.max)} className={`w-10 h-10 rounded-full bg-white border border-gray-300 flex items-center justify-center ${!isReadOnly && 'hover:bg-gray-100'}`}><Minus size={16} /></button>
                               <span className="text-2xl font-bold w-8 text-center">{meemData[section.key as keyof typeof meemData]}</span>
-                              <button onClick={() => handleMeemChange(section.key as any, 1, section.max)} className="w-10 h-10 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100"><Plus size={16} /></button>
+                              <button disabled={isReadOnly} onClick={() => handleMeemChange(section.key as any, 1, section.max)} className={`w-10 h-10 rounded-full bg-white border border-gray-300 flex items-center justify-center ${!isReadOnly && 'hover:bg-gray-100'}`}><Plus size={16} /></button>
                             </div>
                          </div>
                       </div>
@@ -994,7 +1065,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                   </div>
                   <div className="bg-gray-900 text-white rounded-lg p-5 border border-gray-800 flex justify-between items-center mt-8">
                       <div><h4 className="text-lg font-bold">Total: {getMeemTotal()} / 30</h4>{educationLevel && (<p className="text-sm text-gray-400">Ponto de Corte: {getMeemCutoff()}</p>)}</div>
-                      <Button variant="blue" disabled={!educationLevel} onClick={handleSaveMeem} className="py-3 px-8 text-base">FINALIZAR AVALIAÇÃO</Button>
+                      {!isReadOnly && <Button variant="blue" disabled={!educationLevel} onClick={handleSaveMeem} className="py-3 px-8 text-base">FINALIZAR AVALIAÇÃO</Button>}
                   </div>
                 </>
               )}
@@ -1009,7 +1080,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                         <span className="text-lg text-gray-900 font-medium leading-tight flex-1">{item}</span>
                         <div className="flex gap-2">
                           {[0, 1, 2, 3, 4].map((score) => (
-                            <button key={score} onClick={() => handleBergScoreChange(index, score)} className={`w-10 h-10 rounded-full font-bold transition-all duration-200 border ${bergScores[index] === score ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-110' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`} title={`Nota ${score}`}>{score}</button>
+                            <button disabled={isReadOnly} key={score} onClick={() => handleBergScoreChange(index, score)} className={`w-10 h-10 rounded-full font-bold transition-all duration-200 border ${bergScores[index] === score ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-110' : 'bg-white text-gray-500 border-gray-200'} ${!isReadOnly && 'hover:bg-gray-50'}`} title={`Nota ${score}`}>{score}</button>
                           ))}
                         </div>
                       </div>
@@ -1017,7 +1088,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                   </div>
                   <div className="bg-gray-900 text-white rounded-lg p-5 border border-gray-800 flex justify-between items-center mt-8">
                       <div><h4 className="text-lg font-bold">Total: {calculateBergTotal()} / 56</h4><p className="text-xs text-gray-400">&lt; 45 pontos indica alto risco de queda.</p></div>
-                      <Button variant="blue" onClick={handleSaveBerg} className="py-3 px-8 text-base">FINALIZAR AVALIAÇÃO</Button>
+                      {!isReadOnly && <Button variant="blue" onClick={handleSaveBerg} className="py-3 px-8 text-base">FINALIZAR AVALIAÇÃO</Button>}
                   </div>
                 </>
               )}

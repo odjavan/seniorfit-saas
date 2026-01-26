@@ -143,6 +143,24 @@ export const patientService = {
     }
   },
 
+  delete: async (id: string): Promise<void> => {
+    // Obter o ID do usuário logado para validação de segurança (RLS)
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    
+    if (!user) throw new Error("Usuário não autenticado para excluir este aluno.");
+
+    const { error } = await supabase
+      .from('patients')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id); // Garante que só deleta se for dono
+
+    if (error) {
+      console.error('Erro ao excluir paciente:', error);
+      throw new Error('Falha ao excluir aluno: ' + error.message);
+    }
+  },
+
   search: async (query: string): Promise<Patient[]> => {
     if (!query) return patientService.getAll();
     const { data, error } = await supabase

@@ -5,13 +5,13 @@ import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { agendaService } from '../services/agendaService';
 import { useCreateAppointment } from '../services/appointmentService';
-import { authService } from '../services/authService';
-import { Appointment, User as AppUser } from '../types'; 
+import { supabase } from '../lib/supabase';
+import { Appointment, Patient } from '../types'; 
 import { useToast } from '../contexts/ToastContext';
 
 export const Agenda: React.FC = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [patients, setPatients] = useState<AppUser[]>([]); 
+  const [patients, setPatients] = useState<Patient[]>([]); 
   const { addToast } = useToast();
   
   // HOOK DE CRIAÇÃO
@@ -54,9 +54,22 @@ export const Agenda: React.FC = () => {
 
       setAppointments(validAppts);
       
-      // 2. Carrega Lista para Auto-preenchimento
-      const subs = await authService.getSubscribers();
-      setPatients(Array.isArray(subs) ? subs : []);
+      // 2. Carrega Lista de Alunos (SEGURANÇA: Filtro por user_id)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: myPatients, error } = await supabase
+          .from('patients')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('name');
+          
+        if (error) {
+           console.error("Erro ao buscar alunos:", error);
+           setPatients([]);
+        } else {
+           setPatients(myPatients || []);
+        }
+      }
     } catch (e) {
       console.error("ERRO CRÍTICO NA AGENDA. Resetando visualização.", e);
       setAppointments([]);
@@ -79,7 +92,8 @@ export const Agenda: React.FC = () => {
     const patient = patients.find(p => p.id === selectedId);
     if (patient) {
        // Apenas auto-preenche os campos de texto. O ID não será enviado.
-       const phone = (patient as any).whatsapp || (patient as any).phone || (patient as any).celular || '';
+       // Prioriza whatsapp, mas mantemos fallback seguro
+       const phone = patient.whatsapp || '';
        setFormData(prev => ({
          ...prev,
          patientId: selectedId,

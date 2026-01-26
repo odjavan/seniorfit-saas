@@ -14,8 +14,10 @@ import { patientService } from './services/patientService';
 import { User, Patient } from './types';
 import { Modal } from './components/Modal';
 import { InstallGuide } from './components/InstallGuide';
+import { UpdatePasswordPopup } from './components/UpdatePasswordPopup'; // Novo Componente
 import { ToastProvider } from './contexts/ToastContext';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { supabase } from './lib/supabase'; // Importação do cliente Supabase
 
 // Definição dos tipos de views permitidas
 type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'training' | 'agenda';
@@ -31,6 +33,9 @@ function AppContent() {
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [helpVideoUrl, setHelpVideoUrl] = useState('');
+
+  // Password Recovery State
+  const [showUpdatePasswordModal, setShowUpdatePasswordModal] = useState(false);
 
   // Initial Data Fetch
   useEffect(() => {
@@ -77,6 +82,24 @@ function AppContent() {
       }
     };
     initAuth();
+
+    // LISTENER DE AUTH: Detecta recuperação de senha
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth Event Detectado:", event);
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowUpdatePasswordModal(true);
+      }
+      
+      // Se o usuário logar (inclusive após a recuperação), atualizamos o estado
+      if (event === 'SIGNED_IN' && session) {
+         const currentUser = await authService.getCurrentUser();
+         if (currentUser) setUser(currentUser);
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   // Redirecionamento inicial baseado na Role
@@ -149,6 +172,7 @@ function AppContent() {
      return url;
   };
 
+  // Se estiver carregando, mostra spinner
   if (isInitializing) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -157,65 +181,76 @@ function AppContent() {
     );
   }
 
-  if (!user) {
+  // Se não tem usuário logado E não estamos no processo de recuperação de senha
+  if (!user && !showUpdatePasswordModal) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header 
-        user={user} 
-        onLogout={handleLogout} 
-        onHelp={toggleHelp} 
-        onInstall={() => setShowInstallGuide(true)}
-      />
+      {/* Se houver usuário, renderiza o Header e Sidebar. 
+          Se estiver apenas recuperando a senha (user null mas modal true), renderiza um container vazio de fundo. */}
+      {user && (
+        <>
+          <Header 
+            user={user} 
+            onLogout={handleLogout} 
+            onHelp={toggleHelp} 
+            onInstall={() => setShowInstallGuide(true)}
+          />
+          
+          <Sidebar 
+            currentView={currentView === 'patient-details' ? 'patients' : currentView} 
+            onNavigate={handleNavigate} 
+            userRole={user.role}
+          />
+        </>
+      )}
       
-      <Sidebar 
-        currentView={currentView === 'patient-details' ? 'patients' : currentView} 
-        onNavigate={handleNavigate} 
-        userRole={user.role}
-      />
-      
-      <main className="pt-16 lg:ml-64 min-h-[calc(100vh-64px)]">
+      <main className={user ? "pt-16 lg:ml-64 min-h-[calc(100vh-64px)]" : "min-h-screen bg-gray-100"}>
         
-        {/* === ÁREA ADMINISTRATIVA === */}
-        {user.role === 'ADMIN' && (
+        {user && (
           <>
-            {currentView === 'admin-dashboard' && <AdminPanel />}
-            {currentView === 'admin-settings' && <AdminPanel />}
-            {currentView === 'subscribers' && <Subscribers />}
+            {/* === ÁREA ADMINISTRATIVA === */}
+            {user.role === 'ADMIN' && (
+              <>
+                {currentView === 'admin-dashboard' && <AdminPanel />}
+                {currentView === 'admin-settings' && <AdminPanel />}
+                {currentView === 'subscribers' && <Subscribers />}
+                
+                {(currentView === 'integrations' || currentView === 'eduzz' || currentView === 'crm') && (
+                  <Integrations activeView={currentView} />
+                )}
+              </>
+            )}
+
+            {/* === ÁREA CLÍNICA E COMUM === */}
+            {currentView === 'agenda' && (
+              <Agenda />
+            )}
             
-            {(currentView === 'integrations' || currentView === 'eduzz' || currentView === 'crm') && (
-              <Integrations activeView={currentView} />
+            {currentView === 'patients' && (
+              <Patients onSelectPatient={handleSelectPatient} />
+            )}
+            
+            {currentView === 'patient-details' && selectedPatientId && selectedPatient && (
+              <PatientDetails 
+                patient={selectedPatient} 
+                onBack={() => handleNavigate('patients')}
+                onUpdate={handleUpdatePatient}
+              />
+            )}
+            
+            {currentView === 'patient-details' && selectedPatientId && !selectedPatient && (
+                <div className="flex items-center justify-center h-full pt-20">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                </div>
+            )}
+
+            {currentView === 'training' && (
+              <TrainingDashboard />
             )}
           </>
-        )}
-
-        {/* === ÁREA CLÍNICA E COMUM === */}
-        {currentView === 'agenda' && (
-          <Agenda />
-        )}
-        
-        {currentView === 'patients' && (
-          <Patients onSelectPatient={handleSelectPatient} />
-        )}
-        
-        {currentView === 'patient-details' && selectedPatientId && selectedPatient && (
-          <PatientDetails 
-            patient={selectedPatient} 
-            onBack={() => handleNavigate('patients')}
-            onUpdate={handleUpdatePatient}
-          />
-        )}
-        
-        {currentView === 'patient-details' && selectedPatientId && !selectedPatient && (
-             <div className="flex items-center justify-center h-full pt-20">
-               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-             </div>
-        )}
-
-        {currentView === 'training' && (
-          <TrainingDashboard />
         )}
       </main>
 
@@ -251,6 +286,12 @@ function AppContent() {
       )}
 
       <InstallGuide isOpen={showInstallGuide} onClose={() => setShowInstallGuide(false)} />
+      
+      {/* Pop-up de Recuperação de Senha */}
+      <UpdatePasswordPopup 
+        isOpen={showUpdatePasswordModal} 
+        onClose={() => setShowUpdatePasswordModal(false)} 
+      />
     </div>
   );
 }

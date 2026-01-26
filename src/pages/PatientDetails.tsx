@@ -325,7 +325,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
     } else if (testId === 'meem_cognitive') {
       const mRes = res as CognitiveResult;
       if (mRes.scores) setMeemData(mRes.scores);
-      if (mRes.educationLevel) setEducationLevel(mRes.educationLevel);
+      // CORREÇÃO APLICADA: Cast explícito para satisfazer o TypeScript
+      if (mRes.educationLevel) setEducationLevel(mRes.educationLevel as Patient['educationLevel']);
     } else if (testId === 'berg_balance') {
       const bRes = res as BalanceResult;
       if (bRes.itemScores) setBergScores(bRes.itemScores);
@@ -610,8 +611,16 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
        else if (total >= 10) classification = 'declinio_moderado';
        else classification = 'declinio_grave';
     }
-    const result: CognitiveResult = { testId: 'meem_cognitive', scores: meemData, totalScore: total, classification, educationLevel: educationLevel, completedAt: new Date().toISOString() };
-    saveTestResult('meem_cognitive', 'Declínio Cognitivo (MEEM)', result, { educationLevel });
+    const result: CognitiveResult = { 
+      testId: 'meem_cognitive', 
+      scores: meemData, 
+      totalScore: total, 
+      classification, 
+      educationLevel: educationLevel as any, // Cast para evitar erro com união
+      completedAt: new Date().toISOString() 
+    };
+    // CORREÇÃO APLICADA: Cast explícito para o partial do paciente
+    saveTestResult('meem_cognitive', 'Declínio Cognitivo (MEEM)', result, { educationLevel: educationLevel as Patient['educationLevel'] });
   };
 
   // --- Berg Balance Test Logic ---

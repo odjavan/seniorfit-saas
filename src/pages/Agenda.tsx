@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, Plus, User, Phone, CheckCircle, XCircle, MessageCircle, AlertCircle, ClipboardList, Trash2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Plus, User, Phone, CheckCircle, XCircle, MessageCircle, AlertCircle, ClipboardList, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
@@ -17,9 +17,14 @@ export const Agenda: React.FC = () => {
   // HOOK DE CRIAÇÃO
   const { createAppointment, loading: isCreating } = useCreateAppointment();
 
-  // Modal State
+  // Modal State (Create)
   const [isModalOpen, setIsModalOpen] = useState(false);
   
+  // Modal State (Delete Confirmation)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [appointmentToDelete, setAppointmentToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Form State
   const [formData, setFormData] = useState({
     patientId: '', // Usado apenas para controle do UI (Dropdown)
@@ -37,7 +42,7 @@ export const Agenda: React.FC = () => {
 
   const loadAndSanitizeData = async () => {
     try {
-      // 1. Carrega Agendamentos
+      // 1. Carrega Agendamentos (Agora filtrados por usuário no service)
       const rawAppts = await agendaService.getAll();
       const safeAppts = Array.isArray(rawAppts) ? rawAppts : [];
       
@@ -108,10 +113,8 @@ export const Agenda: React.FC = () => {
 
     try {
       // 3. ENVIO BLINDADO (SEM ID)
-      // Instrução Crítica: Ignoramos formData.patientId e enviamos null.
-      // Salvamos apenas o Nome e Telefone nas colunas de texto para evitar FK Constraints.
       await createAppointment({
-        patientId: null,           // <--- ID SEMPRE NULO (Correção Definitiva)
+        patientId: null,           // <--- ID SEMPRE NULO
         patientName: cleanName,    // Persistência via Texto
         patientPhone: cleanPhone,  // Persistência via Texto
         dateTime: `${formData.date}T${formData.time}:00`,
@@ -148,15 +151,27 @@ export const Agenda: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (window.confirm('Tem certeza que deseja remover este agendamento?')) {
-      try {
-        await agendaService.delete(id);
-        loadAndSanitizeData();
-        addToast('Agendamento removido.', 'success');
-      } catch (error) {
-        addToast('Erro ao remover agendamento.', 'error');
-      }
+  // Abre o Modal de Confirmação
+  const handleDeleteRequest = (id: string) => {
+    setAppointmentToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  // Confirma a exclusão
+  const confirmDelete = async () => {
+    if (!appointmentToDelete) return;
+    
+    setIsDeleting(true);
+    try {
+      await agendaService.delete(appointmentToDelete);
+      loadAndSanitizeData();
+      addToast('Agendamento removido.', 'success');
+      setIsDeleteModalOpen(false);
+    } catch (error) {
+      addToast('Erro ao remover agendamento.', 'error');
+    } finally {
+      setIsDeleting(false);
+      setAppointmentToDelete(null);
     }
   };
 
@@ -283,7 +298,7 @@ export const Agenda: React.FC = () => {
                                    <XCircle size={20} />
                                  </button>
                                )}
-                               <button onClick={() => handleDelete(appt.id)} className="text-gray-400 hover:text-red-600 hover:bg-gray-100 p-1.5 rounded text-xs" title="Excluir">
+                               <button onClick={() => handleDeleteRequest(appt.id)} className="text-gray-400 hover:text-red-600 hover:bg-gray-100 p-1.5 rounded text-xs" title="Excluir">
                                  <Trash2 size={20} />
                                </button>
                              </div>
@@ -299,6 +314,7 @@ export const Agenda: React.FC = () => {
         </div>
       )}
 
+      {/* Modal de Criação */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -385,6 +401,39 @@ export const Agenda: React.FC = () => {
             <Button type="submit" variant="blue" isLoading={isCreating}>Confirmar Agendamento</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        title="Confirmar Exclusão"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-4 bg-red-50 p-4 rounded-lg border border-red-100">
+             <div className="p-2 bg-white rounded-full text-red-600 shadow-sm">
+                <AlertTriangle size={24} />
+             </div>
+             <div>
+                <h4 className="font-bold text-red-900">Atenção!</h4>
+                <p className="text-sm text-red-700">Esta ação não poderá ser desfeita. O histórico deste agendamento será perdido.</p>
+             </div>
+          </div>
+          
+          <div className="flex justify-end gap-3 pt-4">
+             <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>
+               Cancelar
+             </Button>
+             <Button 
+               variant="primary" 
+               className="bg-red-600 hover:bg-red-700 focus:ring-red-500" 
+               onClick={confirmDelete}
+               isLoading={isDeleting}
+             >
+               Confirmar Exclusão
+             </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

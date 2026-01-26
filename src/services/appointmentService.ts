@@ -17,13 +17,20 @@ export const appointmentService = {
    * Aceita patientId nulo, desde que patientName seja fornecido.
    */
   createAppointment: async (data: CreateAppointmentDTO): Promise<Appointment> => {
+    // 0. Obter Usuário Logado (Segurança RLS)
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    
+    if (!user) {
+      throw new Error("Sessão expirada. Por favor, faça login novamente.");
+    }
+
     // 1. Validações
     if (!data.patientName) throw new Error("O nome do aluno é obrigatório.");
     if (!data.dateTime) throw new Error("A data e hora são obrigatórias.");
     if (!data.type) throw new Error("O tipo de sessão é obrigatório.");
 
     // 2. Verificação de Conflito de Horário
-    // Busca agendamentos ativos na mesma data
+    // Busca agendamentos ativos na mesma data DO USUÁRIO LOGADO
     // Nota: Lógica simplificada de conflito. Em produção, usar range filters do Supabase.
     const checkDate = new Date(data.dateTime);
     const startWindow = new Date(checkDate.getTime() - 59 * 60000).toISOString();
@@ -32,6 +39,7 @@ export const appointmentService = {
     const { data: conflicts } = await supabase
       .from('appointments')
       .select('id, date_time')
+      .eq('user_id', user.id) // RLS: Só verifica conflitos do próprio usuário
       .neq('status', 'Concluído')
       .neq('status', 'Faltou')
       .gte('date_time', startWindow)
@@ -41,8 +49,9 @@ export const appointmentService = {
       throw new Error('Choque de horários! Já existe um agendamento neste intervalo de 1h.');
     }
 
-    // 3. Montar Payload (Mapeamento Explícito)
+    // 3. Montar Payload (Mapeamento Explícito + RLS)
     const payload = {
+      user_id: user.id,           // RLS: Vínculo obrigatório com o dono
       patient_id: data.patientId || null, // Permite nulo (Soft Constraint)
       patient_name: data.patientName,
       patient_phone: data.patientPhone || '',

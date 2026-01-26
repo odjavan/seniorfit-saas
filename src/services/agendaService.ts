@@ -1,12 +1,20 @@
 import { supabase } from '../lib/supabase';
 import { Appointment } from '../types';
-import { RealtimeChannel } from '@supabase/supabase-js';
 
 export const agendaService = {
   getAll: async (): Promise<Appointment[]> => {
+    // Obter usuário para RLS no Frontend
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    
+    if (!user) {
+      console.warn("Usuário não autenticado ao tentar ler agenda.");
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('appointments')
       .select('*')
+      .eq('user_id', user.id) // RLS: Apenas dados do usuário
       .order('date_time', { ascending: true });
 
     if (error) {
@@ -26,90 +34,45 @@ export const agendaService = {
     }));
   },
 
+  // OBS: create movido para appointmentService para centralizar a lógica blindada
+  // Mantemos aqui caso legado, mas redirecionando erro.
   create: async (appointment: Omit<Appointment, 'id'>): Promise<Appointment> => {
-    // 1. Validações Básicas
-    if (!appointment.patientName) {
-      throw new Error("O nome do aluno é obrigatório.");
-    }
-    if (!appointment.patientId) {
-      throw new Error("O ID do aluno é obrigatório.");
-    }
-
-    // 2. Verificação de conflito de horário (opcional, mantendo lógica existente)
-    const { data: existing } = await supabase
-      .from('appointments')
-      .select('date_time')
-      .neq('status', 'Concluído')
-      .neq('status', 'Faltou');
-
-    const newTime = new Date(appointment.dateTime).getTime();
-    
-    if (existing) {
-      const hasConflict = existing.some(appt => {
-        const existingTime = new Date(appt.date_time).getTime();
-        const diffMinutes = Math.abs(existingTime - newTime) / (1000 * 60);
-        return diffMinutes < 60; // Bloqueia conflitos de 1h
-      });
-
-      if (hasConflict) {
-        throw new Error('Choque de horários! Intervalo mínimo de 1h necessário.');
-      }
-    }
-
-    // 3. Payload "Mirror Operation": Envio direto e explícito para as colunas
-    const dbPayload = {
-      patient_id: appointment.patientId,      // FK Obrigatória
-      patient_name: appointment.patientName,  // Denormalizado (Explicitamente solicitado)
-      patient_phone: appointment.patientPhone || '', // Denormalizado
-      date_time: appointment.dateTime,
-      type: appointment.type,                 // Coluna type
-      status: appointment.status,
-      notes: appointment.notes || ''
-    };
-
-    const { data, error } = await supabase
-      .from('appointments')
-      .insert([dbPayload])
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Supabase Agenda Insert Error:", error);
-      throw new Error(error.message);
-    }
-
-    return {
-      id: data.id,
-      patientId: data.patient_id,
-      patientName: data.patient_name,
-      patientPhone: data.patient_phone,
-      dateTime: data.date_time,
-      type: data.type,
-      status: data.status,
-      notes: data.notes
-    };
+     throw new Error("Use appointmentService.createAppointment para garantir segurança.");
   },
 
   updateStatus: async (id: string, status: Appointment['status']): Promise<void> => {
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    if (!user) throw new Error("Usuário não autenticado.");
+
     const { error } = await supabase
       .from('appointments')
-      .update({ status })
-      .eq('id', id);
+      .update({ 
+        status,
+        updated_at: new Date().toISOString() // Rastreabilidade
+      })
+      .eq('id', id)
+      .eq('user_id', user.id); // RLS: Garante propriedade
 
     if (error) throw new Error(error.message);
   },
 
   delete: async (id: string): Promise<void> => {
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    if (!user) throw new Error("Usuário não autenticado.");
+
     const { error } = await supabase
       .from('appointments')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', user.id); // RLS: Garante propriedade
 
     if (error) throw new Error(error.message);
   },
 
   // --- Realtime ---
-  subscribe: (onUpdate: () => void): RealtimeChannel => {
+  subscribe: (onUpdate: () => void): any => {
+    // Nota: O filtro de RLS no Realtime depende das Policies do Supabase.
+    // O frontend apenas escuta a tabela.
     return supabase
       .channel('agenda-changes')
       .on(

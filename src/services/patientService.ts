@@ -63,6 +63,10 @@ export const patientService = {
   create: async (patientData: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient> => {
     // Obter o ID do usuário logado para vincular o paciente
     const { data: { user } } = await (supabase.auth as any).getUser();
+    
+    // DIAGNÓSTICO INSERT
+    console.log('DIAGNÓSTICO INSERT: Usuário obtido:', user);
+
     if (!user) throw new Error("Usuário não autenticado para realizar o cadastro.");
 
     // A Edge Function cuidará do Email de Boas-Vindas via Database Webhook
@@ -81,19 +85,30 @@ export const patientService = {
       history: patientData.history || []
     };
 
+    // DIAGNÓSTICO INSERT
+    console.log('DIAGNÓSTICO INSERT: Dados a serem inseridos:', dbPayload);
+
     const { data, error } = await supabase
       .from('patients')
       .insert([dbPayload])
       .select()
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      // DIAGNÓSTICO INSERT
+      console.error('DIAGNÓSTICO INSERT: Erro detalhado:', error);
+      throw new Error(error.message);
+    }
     return mapToPatient(data);
   },
 
   update: async (patient: Patient): Promise<void> => {
     // Obter o ID do usuário logado para validação de segurança (RLS)
     const { data: { user } } = await (supabase.auth as any).getUser();
+
+    // DIAGNÓSTICO UPDATE
+    console.log('DIAGNÓSTICO UPDATE: Usuário obtido:', user);
+
     if (!user) throw new Error("Usuário não autenticado para editar este aluno.");
 
     const dbPayload = {
@@ -111,13 +126,21 @@ export const patientService = {
       updated_at: new Date().toISOString()
     };
 
+    // DIAGNÓSTICO UPDATE
+    console.log('DIAGNÓSTICO UPDATE: Dados a serem atualizados:', dbPayload);
+    console.log('DIAGNÓSTICO UPDATE: ID do paciente:', patient.id);
+
     const { error } = await supabase
       .from('patients')
       .update(dbPayload)
       .eq('id', patient.id)
       .eq('user_id', user.id); // Filtro de segurança essencial para RLS
 
-    if (error) throw new Error('Falha ao atualizar dados do aluno: ' + error.message);
+    if (error) {
+      // DIAGNÓSTICO UPDATE
+      console.error('DIAGNÓSTICO UPDATE: Erro detalhado:', error);
+      throw new Error('Falha ao atualizar dados do aluno: ' + error.message);
+    }
   },
 
   search: async (query: string): Promise<Patient[]> => {

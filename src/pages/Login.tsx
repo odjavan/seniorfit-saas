@@ -7,6 +7,7 @@ import { emailService } from '../services/emailService';
 import { User } from '../types';
 import { ShieldCheck } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
+import { supabase } from '../lib/supabase';
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
@@ -52,6 +53,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsSendingRecovery(true);
     
     try {
+      /* CÓDIGO ANTIGO (EMAILJS) - COMENTADO
       // Busca de usuários é async (Supabase)
       const users = await authService.getAllUsers();
       const userExists = users.find(u => u.email.toLowerCase() === recoveryEmail.toLowerCase());
@@ -65,6 +67,19 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       // Envio de email é async
       await emailService.sendRecovery(recoveryEmail);
       addToast(`Instruções enviadas para ${recoveryEmail}`, 'success');
+      */
+
+      // NOVA IMPLEMENTAÇÃO: Supabase Auth Nativo
+      const { error } = await supabase.auth.resetPasswordForEmail(recoveryEmail, {
+        redirectTo: 'http://localhost:3000/update-password',
+      });
+
+      if (error) {
+        throw error;
+      } else {
+        addToast(`Se o e-mail estiver correto, um link de recuperação foi enviado para ${recoveryEmail}`, 'success');
+      }
+
       setIsRecoveryOpen(false);
       setRecoveryEmail('');
     } catch (error: any) {
@@ -193,7 +208,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Digite seu e-mail abaixo. Enviaremos um link seguro para redefinição de senha via <strong>EmailJS</strong>.
+            Digite seu e-mail abaixo. Enviaremos um link seguro para redefinição de senha via <strong>Supabase Auth</strong>.
           </p>
           
           <form onSubmit={handleRecoverySubmit} className="space-y-4">

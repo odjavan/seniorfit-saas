@@ -62,8 +62,13 @@ export const patientService = {
   },
 
   create: async (patientData: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient> => {
+    // Obter o ID do usuário logado para vincular o paciente
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Usuário não autenticado para realizar o cadastro.");
+
     // A Edge Function cuidará do Email de Boas-Vindas via Database Webhook
     const dbPayload = {
+      user_id: user.id, // Vinculação com o criador
       name: patientData.name,
       birth_date: patientData.birthDate,
       sex: patientData.sex,

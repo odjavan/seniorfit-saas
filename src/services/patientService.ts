@@ -1,6 +1,5 @@
 import { supabase } from '../lib/supabase';
 import { Patient } from '../types';
-import { RealtimeChannel } from '@supabase/supabase-js';
 
 // Helper para formatar dados do banco (snake_case) para o frontend (camelCase)
 const mapToPatient = (p: any): Patient => {
@@ -63,7 +62,7 @@ export const patientService = {
 
   create: async (patientData: Omit<Patient, 'id' | 'createdAt' | 'updatedAt'>): Promise<Patient> => {
     // Obter o ID do usuário logado para vincular o paciente
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await (supabase.auth as any).getUser();
     if (!user) throw new Error("Usuário não autenticado para realizar o cadastro.");
 
     // A Edge Function cuidará do Email de Boas-Vindas via Database Webhook
@@ -93,6 +92,10 @@ export const patientService = {
   },
 
   update: async (patient: Patient): Promise<void> => {
+    // Obter o ID do usuário logado para validação de segurança (RLS)
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    if (!user) throw new Error("Usuário não autenticado para editar este aluno.");
+
     const dbPayload = {
       name: patient.name,
       birth_date: patient.birthDate,
@@ -111,7 +114,8 @@ export const patientService = {
     const { error } = await supabase
       .from('patients')
       .update(dbPayload)
-      .eq('id', patient.id);
+      .eq('id', patient.id)
+      .eq('user_id', user.id); // Filtro de segurança essencial para RLS
 
     if (error) throw new Error('Falha ao atualizar dados do aluno: ' + error.message);
   },
@@ -130,7 +134,7 @@ export const patientService = {
   // --- Realtime / Escuta Ativa ---
 
   // Escuta alterações na tabela inteira (para atualizar listas)
-  subscribeToAll: (onUpdate: () => void): RealtimeChannel => {
+  subscribeToAll: (onUpdate: () => void): any => {
     return supabase
       .channel('patients-list-changes')
       .on(
@@ -142,7 +146,7 @@ export const patientService = {
   },
 
   // Escuta alterações em um paciente específico (para a tela de detalhes)
-  subscribeById: (id: string, onUpdate: (patient: Patient) => void): RealtimeChannel => {
+  subscribeById: (id: string, onUpdate: (patient: Patient) => void): any => {
     return supabase
       .channel(`patient-${id}`)
       .on(

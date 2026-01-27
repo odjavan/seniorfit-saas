@@ -1,7 +1,7 @@
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
-import { LogOut, HelpCircle, User as UserIcon, Download, Activity } from 'lucide-react';
+import { LogOut, HelpCircle, User as UserIcon, Download, Activity, ChevronDown, UserCircle } from 'lucide-react';
 import { Button } from './Button';
 
 interface HeaderProps {
@@ -9,11 +9,33 @@ interface HeaderProps {
   onLogout: () => void;
   onHelp: () => void;
   onInstall: () => void;
+  onNavigateToProfile: () => void;
   appName: string;
   appLogoUrl?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onHelp, onInstall, appName, appLogoUrl }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onHelp, onInstall, onNavigateToProfile, appName, appLogoUrl }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Fecha o menu se clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleProfileClick = () => {
+    setIsMenuOpen(false);
+    onNavigateToProfile();
+  };
+
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
       <div className="flex items-center gap-3">
@@ -32,12 +54,31 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onHelp, onInstal
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-full border border-gray-100">
-          <UserIcon size={16} className="text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">{user.name}</span>
-          <span className="text-xs font-semibold text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded ml-1">
-            {user.role}
-          </span>
+        {/* Dropdown do Usuário */}
+        <div className="relative hidden md:block" ref={menuRef}>
+          <button 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-full border border-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <UserIcon size={16} className="text-gray-500" />
+            <span className="text-sm font-medium text-gray-700">{user.name}</span>
+            <span className="text-xs font-semibold text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded ml-1">
+              {user.role}
+            </span>
+            <ChevronDown size={14} className={`text-gray-400 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isMenuOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 border border-gray-200 ring-1 ring-black ring-opacity-5 animate-fade-in">
+              <button
+                onClick={handleProfileClick}
+                className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <UserCircle size={16} className="mr-2 text-gray-500" />
+                Meu Perfil
+              </button>
+            </div>
+          )}
         </div>
 
         <button 

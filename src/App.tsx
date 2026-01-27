@@ -9,11 +9,12 @@ import { Integrations } from './pages/Integrations';
 import { BrandingPage } from './pages/BrandingPage';
 import { TrainingDashboard } from './pages/TrainingDashboard';
 import { Agenda } from './pages/Agenda';
+import { ProfilePage } from './pages/ProfilePage'; // Importação da nova página
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { authService } from './services/authService';
 import { patientService } from './services/patientService';
-import { brandingService } from './services/brandingService'; // Importação do serviço de marca
+import { brandingService } from './services/brandingService'; 
 import { User, Patient } from './types';
 import { Modal } from './components/Modal';
 import { InstallGuide } from './components/InstallGuide';
@@ -21,8 +22,8 @@ import { UpdatePasswordPopup } from './components/UpdatePasswordPopup';
 import { ToastProvider } from './contexts/ToastContext';
 import { supabase } from './lib/supabase';
 
-// Definição dos tipos de views permitidas
-type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'branding' | 'training' | 'agenda';
+// Definição dos tipos de views permitidas (Adicionado 'profile')
+type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'branding' | 'training' | 'agenda' | 'profile';
 
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
@@ -33,7 +34,7 @@ function AppContent() {
   
   // Branding State
   const [branding, setBranding] = useState({
-    appName: 'Especial Senior', // Fallback padrão solicitado
+    appName: 'Especial Senior',
     appLogoUrl: ''
   });
   
@@ -89,7 +90,7 @@ function AppContent() {
         // 2. Carregar configurações de marca (Dinâmico)
         const brandingSettings = await brandingService.getBrandingSettings();
         setBranding({
-          appName: brandingSettings.appName || 'Especial Senior', // Regra de Fallback
+          appName: brandingSettings.appName || 'Especial Senior',
           appLogoUrl: brandingSettings.appLogoUrl || ''
         });
 
@@ -224,6 +225,7 @@ function AppContent() {
             onLogout={handleLogout} 
             onHelp={toggleHelp} 
             onInstall={() => setShowInstallGuide(true)}
+            onNavigateToProfile={() => handleNavigate('profile')} // Passando navegação do perfil
             appName={branding.appName}
             appLogoUrl={branding.appLogoUrl}
           />
@@ -232,7 +234,7 @@ function AppContent() {
             currentView={currentView === 'patient-details' ? 'patients' : currentView} 
             onNavigate={handleNavigate} 
             userRole={user.role}
-            appName={branding.appName} // Passando para o rodapé
+            appName={branding.appName} 
           />
         </>
       )}
@@ -270,6 +272,11 @@ function AppContent() {
                 onBack={() => handleNavigate('patients')}
                 onUpdate={handleUpdatePatient}
               />
+            )}
+
+            {/* Nova Rota de Perfil */}
+            {currentView === 'profile' && (
+              <ProfilePage user={user} />
             )}
             
             {currentView === 'patient-details' && selectedPatientId && !selectedPatient && (

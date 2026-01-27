@@ -1,3 +1,4 @@
+
 // @ts-ignore
 declare const Deno: any;
 
@@ -54,7 +55,7 @@ serve(async (req) => {
     // C. Autenticação (Obter Access Token)
     console.log("🔐 Autenticando com a API da Eduzz...");
     
-    const tokenResponse = await fetch('https://api.eduzz.com/v1/token', {
+    const tokenResponse = await fetch('https://accounts-api.eduzz.com/oauth/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

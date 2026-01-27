@@ -260,7 +260,7 @@ function AppContent() {
             onLogout={handleLogout} 
             onHelp={toggleHelp} 
             onInstall={() => setShowInstallGuide(true)}
-            onNavigateToProfile={() => handleNavigate('profile')} // Passando navegação do perfil
+            onNavigateToProfile={() => handleNavigate('profile')}
             appName={branding.appName}
             appLogoUrl={branding.appLogoUrl}
           />

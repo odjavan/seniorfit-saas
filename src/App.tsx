@@ -13,6 +13,7 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { authService } from './services/authService';
 import { patientService } from './services/patientService';
+import { brandingService } from './services/brandingService'; // Importação do serviço de marca
 import { User, Patient } from './types';
 import { Modal } from './components/Modal';
 import { InstallGuide } from './components/InstallGuide';
@@ -30,6 +31,12 @@ function AppContent() {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   
+  // Branding State
+  const [branding, setBranding] = useState({
+    appName: 'Especial Senior', // Fallback padrão solicitado
+    appLogoUrl: ''
+  });
+  
   // Install/Help Modal States
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
@@ -44,6 +51,7 @@ function AppContent() {
       if (selectedPatientId) {
         try {
           const p = await patientService.getById(selectedPatientId);
+          setSelectedPatientId(p ? p.id : null);
           setSelectedPatient(p);
         } catch (error) {
           console.error("Failed to fetch patient", error);
@@ -70,19 +78,28 @@ function AppContent() {
   }, [selectedPatientId]);
 
   useEffect(() => {
-    const initAuth = async () => {
+    const initApp = async () => {
       try {
+        // 1. Carregar usuário
         const storedUser = await authService.getCurrentUser();
         if (storedUser) {
           setUser(storedUser);
         }
+
+        // 2. Carregar configurações de marca (Dinâmico)
+        const brandingSettings = await brandingService.getBrandingSettings();
+        setBranding({
+          appName: brandingSettings.appName || 'Especial Senior', // Regra de Fallback
+          appLogoUrl: brandingSettings.appLogoUrl || ''
+        });
+
       } catch (error) {
-        console.error("Auth init error:", error);
+        console.error("App init error:", error);
       } finally {
         setIsInitializing(false);
       }
     };
-    initAuth();
+    initApp();
 
     // LISTENER DE AUTH: Detecta recuperação de senha
     const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: string, session: any) => {
@@ -177,14 +194,23 @@ function AppContent() {
   if (isInitializing) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+        <div className="flex flex-col items-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4"></div>
+          <p className="text-gray-500 font-medium">Carregando...</p>
+        </div>
       </div>
     );
   }
 
   // Se não tem usuário logado E não estamos no processo de recuperação de senha
   if (!user && !showUpdatePasswordModal) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <Login 
+        onLoginSuccess={handleLoginSuccess} 
+        appName={branding.appName} 
+        appLogoUrl={branding.appLogoUrl}
+      />
+    );
   }
 
   return (
@@ -198,12 +224,15 @@ function AppContent() {
             onLogout={handleLogout} 
             onHelp={toggleHelp} 
             onInstall={() => setShowInstallGuide(true)}
+            appName={branding.appName}
+            appLogoUrl={branding.appLogoUrl}
           />
           
           <Sidebar 
             currentView={currentView === 'patient-details' ? 'patients' : currentView} 
             onNavigate={handleNavigate} 
             userRole={user.role}
+            appName={branding.appName} // Passando para o rodapé
           />
         </>
       )}
@@ -281,7 +310,7 @@ function AppContent() {
                  </div>
                )}
                <div className="text-center text-xs text-gray-400 pt-4 border-t border-gray-100">
-                 Versão 1.28.6 (Stable)
+                 {branding.appName} v1.28.6
                </div>
             </div>
          </Modal>

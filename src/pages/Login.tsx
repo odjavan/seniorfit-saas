@@ -1,9 +1,9 @@
+
 import React, { useState } from 'react';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
 import { authService } from '../services/authService';
-import { emailService } from '../services/emailService';
 import { User } from '../types';
 import { ShieldCheck } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
@@ -11,9 +11,11 @@ import { supabase } from '../lib/supabase';
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
+  appName: string;
+  appLogoUrl?: string;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+export const Login: React.FC<LoginProps> = ({ onLoginSuccess, appName, appLogoUrl }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isHuman, setIsHuman] = useState(false);
@@ -53,24 +55,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setIsSendingRecovery(true);
     
     try {
-      /* CÓDIGO ANTIGO (EMAILJS) - COMENTADO
-      // Busca de usuários é async (Supabase)
-      const users = await authService.getAllUsers();
-      const userExists = users.find(u => u.email.toLowerCase() === recoveryEmail.toLowerCase());
-
-      if (!userExists) {
-        addToast('E-mail não encontrado no sistema. Verifique a digitação.', 'warning');
-        setIsSendingRecovery(false);
-        return;
-      }
-
-      // Envio de email é async
-      await emailService.sendRecovery(recoveryEmail);
-      addToast(`Instruções enviadas para ${recoveryEmail}`, 'success');
-      */
-
       // NOVA IMPLEMENTAÇÃO: Supabase Auth Nativo
-      const { error } = await supabase.auth.resetPasswordForEmail(recoveryEmail, {
+      const { error } = await (supabase.auth as any).resetPasswordForEmail(recoveryEmail, {
         redirectTo: 'http://localhost:3000/update-password',
       });
 
@@ -99,12 +85,20 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center mb-6">
-          <div className="bg-gray-900 text-white p-3 rounded-xl shadow-lg">
-             <ShieldCheck size={40} />
-          </div>
+          {appLogoUrl ? (
+            <img 
+              src={appLogoUrl} 
+              alt="App Logo" 
+              className="h-20 w-auto object-contain rounded-xl shadow-sm"
+            />
+          ) : (
+            <div className="bg-gray-900 text-white p-3 rounded-xl shadow-lg">
+               <ShieldCheck size={40} />
+            </div>
+          )}
         </div>
         <h2 className="text-center text-3xl font-extrabold text-gray-900 tracking-tight">
-          SeniorFit
+          {appName}
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Acesso Profissional Seguro
@@ -194,7 +188,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 <div className="w-full border-t border-gray-300"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500 font-medium">Versão 1.16 (Master)</span>
+                <span className="px-2 bg-white text-gray-500 font-medium">Versão 1.28.6</span>
               </div>
             </div>
           </div>

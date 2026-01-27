@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { User } from '../types';
-import { LogOut, HelpCircle, User as UserIcon, Download } from 'lucide-react';
+import { LogOut, HelpCircle, User as UserIcon, Download, Activity } from 'lucide-react';
 import { Button } from './Button';
 
 interface HeaderProps {
@@ -8,16 +9,26 @@ interface HeaderProps {
   onLogout: () => void;
   onHelp: () => void;
   onInstall: () => void;
+  appName: string;
+  appLogoUrl?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onHelp, onInstall }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onHelp, onInstall, appName, appLogoUrl }) => {
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <div className="bg-gray-900 text-white p-1.5 rounded-lg">
-           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-activity"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        </div>
-        <span className="text-xl font-bold text-gray-900 tracking-tight">SeniorFit</span>
+      <div className="flex items-center gap-3">
+        {appLogoUrl ? (
+          <img 
+            src={appLogoUrl} 
+            alt="Logo" 
+            className="h-10 w-10 object-contain rounded-md"
+          />
+        ) : (
+          <div className="bg-gray-900 text-white p-1.5 rounded-lg">
+             <Activity size={20} strokeWidth={2.5} />
+          </div>
+        )}
+        <span className="text-xl font-bold text-gray-900 tracking-tight">{appName}</span>
       </div>
 
       <div className="flex items-center gap-4">

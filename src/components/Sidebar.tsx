@@ -7,9 +7,10 @@ interface SidebarProps {
   currentView: string;
   onNavigate: (view: 'patients' | 'admin-settings' | 'subscribers' | 'admin-dashboard' | 'training' | 'agenda' | 'integrations' | 'eduzz' | 'crm' | 'branding') => void;
   userRole?: Role;
+  appName?: string;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userRole }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userRole, appName = 'SeniorFit' }) => {
   let menuItems = [];
 
   // Definição estrita dos menus baseada na Role
@@ -70,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       {/* Rodapé da Sidebar */}
       <div className="absolute bottom-0 w-full p-4 border-t border-gray-100 bg-gray-50">
         <div className="text-xs text-center text-gray-400">
-          SeniorFit v1.28.6
+          {appName} v1.28.6
         </div>
       </div>
     </aside>

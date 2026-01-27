@@ -1,5 +1,5 @@
 
-export type Role = 'ADMIN' | 'TRAINER' | 'PERSONAL' | 'SUBSCRIBER';
+export type Role = 'ADMIN' | 'TRAINER' | 'PERSONAL' | 'SUBSCRIBER' | 'subscriber';
 
 export interface User {
   id: string;
@@ -40,6 +40,8 @@ export interface Appointment {
 
 export interface SystemSettings {
   howToInstallVideoUrl: string;
+  appName?: string;
+  appLogoUrl?: string;
 }
 
 export interface IntegrationSettings {
@@ -146,7 +148,7 @@ export interface CognitiveResult {
   };
   totalScore: number;
   classification: 'sem_declinio' | 'declinio_leve' | 'declinio_moderado' | 'declinio_grave';
-  educationLevel: string;
+  educationLevel: 'analfabeto' | '1-4' | '5-8' | '9-11' | '12+';
   completedAt: string;
 }
 

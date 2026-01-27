@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Login } from './pages/Login';
 import { Patients } from './pages/Patients';
@@ -5,6 +6,7 @@ import { PatientDetails } from './pages/PatientDetails';
 import { AdminPanel } from './pages/AdminPanel';
 import { Subscribers } from './pages/Subscribers';
 import { Integrations } from './pages/Integrations';
+import { BrandingPage } from './pages/BrandingPage';
 import { TrainingDashboard } from './pages/TrainingDashboard';
 import { Agenda } from './pages/Agenda';
 import { Header } from './components/Header';
@@ -14,13 +16,12 @@ import { patientService } from './services/patientService';
 import { User, Patient } from './types';
 import { Modal } from './components/Modal';
 import { InstallGuide } from './components/InstallGuide';
-import { UpdatePasswordPopup } from './components/UpdatePasswordPopup'; // Novo Componente
+import { UpdatePasswordPopup } from './components/UpdatePasswordPopup'; 
 import { ToastProvider } from './contexts/ToastContext';
-import { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from './lib/supabase'; // Importação do cliente Supabase
+import { supabase } from './lib/supabase';
 
 // Definição dos tipos de views permitidas
-type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'training' | 'agenda';
+type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dashboard' | 'subscribers' | 'integrations' | 'eduzz' | 'crm' | 'branding' | 'training' | 'agenda';
 
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
@@ -55,7 +56,7 @@ function AppContent() {
     fetchPatient();
 
     // REALTIME: Inscrever para atualizações deste paciente específico
-    let subscription: RealtimeChannel | null = null;
+    let subscription: any | null = null;
     if (selectedPatientId) {
       subscription = patientService.subscribeById(selectedPatientId, (updatedPatient) => {
         console.log("Realtime Update Received for Patient:", updatedPatient.name);
@@ -84,7 +85,7 @@ function AppContent() {
     initAuth();
 
     // LISTENER DE AUTH: Detecta recuperação de senha
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: string, session: any) => {
       console.log("Auth Event Detectado:", event);
       if (event === 'PASSWORD_RECOVERY') {
         setShowUpdatePasswordModal(true);
@@ -110,7 +111,7 @@ function AppContent() {
             setCurrentView('admin-dashboard');
         }
       } else {
-        const adminOnlyViews = ['admin-dashboard', 'admin-settings', 'subscribers', 'integrations', 'eduzz', 'crm'];
+        const adminOnlyViews = ['admin-dashboard', 'admin-settings', 'subscribers', 'integrations', 'eduzz', 'crm', 'branding'];
         if (adminOnlyViews.includes(currentView)) {
            setCurrentView('patients');
         }
@@ -140,7 +141,7 @@ function AppContent() {
   };
 
   const handleNavigate = (view: ViewState) => {
-    const adminViews = ['admin-settings', 'admin-dashboard', 'subscribers', 'integrations', 'eduzz', 'crm'];
+    const adminViews = ['admin-settings', 'admin-dashboard', 'subscribers', 'integrations', 'eduzz', 'crm', 'branding'];
     
     if (adminViews.includes(view) && user?.role !== 'ADMIN') {
       alert('Acesso negado. Apenas administradores podem acessar esta área.');
@@ -217,6 +218,7 @@ function AppContent() {
                 {currentView === 'admin-dashboard' && <AdminPanel />}
                 {currentView === 'admin-settings' && <AdminPanel />}
                 {currentView === 'subscribers' && <Subscribers />}
+                {currentView === 'branding' && <BrandingPage />}
                 
                 {(currentView === 'integrations' || currentView === 'eduzz' || currentView === 'crm') && (
                   <Integrations activeView={currentView} />

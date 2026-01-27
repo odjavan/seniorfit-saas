@@ -1,10 +1,11 @@
+
 import React from 'react';
-import { Users, Settings, BarChart3, Database, Calendar, Zap, DollarSign, Bell } from 'lucide-react';
+import { Users, Settings, BarChart3, Database, Calendar, Zap, DollarSign, Bell, Palette } from 'lucide-react';
 import { Role } from '../types';
 
 interface SidebarProps {
   currentView: string;
-  onNavigate: (view: 'patients' | 'admin-settings' | 'subscribers' | 'admin-dashboard' | 'training' | 'agenda' | 'integrations' | 'eduzz' | 'crm') => void;
+  onNavigate: (view: 'patients' | 'admin-settings' | 'subscribers' | 'admin-dashboard' | 'training' | 'agenda' | 'integrations' | 'eduzz' | 'crm' | 'branding') => void;
   userRole?: Role;
 }
 
@@ -19,6 +20,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       { id: 'patients', label: 'Meus Alunos', icon: Database }, 
       { id: 'agenda', label: 'Agenda Master', icon: Calendar },
       // Treinamento removido
+      { id: 'branding', label: 'Marca', icon: Palette },
       { id: 'integrations', label: 'Integrações & IA', icon: Zap },
       { id: 'eduzz', label: 'Eduzz Financeiro', icon: DollarSign },
       { id: 'crm', label: 'CRM & Notificações', icon: Bell },
@@ -68,7 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, userR
       {/* Rodapé da Sidebar */}
       <div className="absolute bottom-0 w-full p-4 border-t border-gray-100 bg-gray-50">
         <div className="text-xs text-center text-gray-400">
-          SeniorFit v1.28.5
+          SeniorFit v1.28.6
         </div>
       </div>
     </aside>

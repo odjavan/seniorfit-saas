@@ -175,6 +175,11 @@ function AppContent() {
     setUser(null);
     setCurrentView('patients');
   };
+
+  // --- Função para atualizar o usuário globalmente (Callback) ---
+  const handleUserUpdate = (updatedUser: User) => {
+    setUser(updatedUser);
+  };
   
   const toggleHelp = async () => {
     try {
@@ -304,9 +309,9 @@ function AppContent() {
               />
             )}
 
-            {/* Nova Rota de Perfil */}
+            {/* Nova Rota de Perfil com Callback de Atualização */}
             {currentView === 'profile' && (
-              <ProfilePage user={user} />
+              <ProfilePage user={user} onUserUpdate={handleUserUpdate} />
             )}
             
             {currentView === 'patient-details' && selectedPatientId && !selectedPatient && (

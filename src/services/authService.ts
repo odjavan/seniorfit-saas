@@ -1,3 +1,4 @@
+
 import { supabase } from '../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { User, Role, SystemSettings, IntegrationSettings } from '../types';
@@ -16,7 +17,7 @@ export const authService = {
   // --- Auth Core ---
 
   login: async (email: string, password: string): Promise<User> => {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: authError } = await (supabase.auth as any).signInWithPassword({
       email,
       password,
     });
@@ -54,12 +55,12 @@ export const authService = {
   },
 
   logout: async () => {
-    await supabase.auth.signOut();
+    await (supabase.auth as any).signOut();
     localStorage.clear(); 
   },
 
   getCurrentUser: async (): Promise<User | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await (supabase.auth as any).getSession();
     if (!session?.user) return null;
 
     const { data: profile } = await supabase
@@ -138,8 +139,6 @@ export const authService = {
     console.log("Iniciando criação de usuário...");
 
     // 1. Cria um Cliente Supabase Temporário
-    // Isso é CRUCIAL para criar um novo usuário sem deslogar o Admin atual.
-    // Usamos persistSession: false para que este cliente não interfira no localStorage.
     const tempSupabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
@@ -149,7 +148,7 @@ export const authService = {
     });
 
     // 2. Cria o Auth User (Retorna o UID real)
-    const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+    const { data: authData, error: authError } = await (tempSupabase.auth as any).signUp({
       email: userData.email!,
       password: password || '123456',
       options: {
@@ -160,7 +159,6 @@ export const authService = {
     });
 
     if (authError) {
-      // Tratamento para erro comum "User already registered"
       if (authError.message.includes('already registered')) {
          throw new Error('Este e-mail já está cadastrado no sistema de autenticação.');
       }
@@ -175,13 +173,12 @@ export const authService = {
     console.log("UID Gerado:", realUserId);
 
     // 3. Insere na tabela 'profiles' usando o ID REAL
-    // Aqui usamos o cliente 'supabase' principal (do Admin) para ter permissão de escrita.
     const { error: profileError } = await supabase.from('profiles').insert([{
-      id: realUserId, // A CHAVE DO SUCESSO: Usar o ID retornado pelo Auth
+      id: realUserId,
       email: userData.email,
       name: userData.name,
-      role: 'SUBSCRIBER', // Padronizado
-      subscription_status: 'ACTIVE', // Padronizado
+      role: 'SUBSCRIBER',
+      subscription_status: 'ACTIVE',
       cpf: userData.cpf || null,
       eduzz_id: userData.eduzzId || null,
       created_at: new Date().toISOString()
@@ -210,8 +207,31 @@ export const authService = {
     if (error) throw new Error(error.message);
   },
 
+  // --- NOVO MÉTODO: Atualização de Perfil (Self-Service) ---
+  updateProfileName: async (userId: string, newName: string): Promise<void> => {
+    // 1. Atualizar Metadados do Auth (Supabase Auth)
+    const { error: authError } = await (supabase.auth as any).updateUser({
+      data: { full_name: newName, name: newName }
+    });
+    
+    if (authError) {
+      console.error("Erro ao atualizar Auth Metadata:", authError);
+      throw new Error('Falha ao atualizar metadados de autenticação.');
+    }
+
+    // 2. Atualizar Tabela de Perfis (Aplicação)
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .update({ name: newName })
+      .eq('id', userId);
+
+    if (dbError) {
+      console.error("Erro ao atualizar Profile DB:", dbError);
+      throw new Error('Falha ao salvar nome no banco de dados.');
+    }
+  },
+
   deleteUser: async (id: string): Promise<void> => {
-    // Nota: Deletar do 'profiles' não deleta do 'auth.users' sem trigger/cascade.
     const { error } = await supabase
       .from('profiles')
       .delete()

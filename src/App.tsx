@@ -27,7 +27,11 @@ type ViewState = 'patients' | 'patient-details' | 'admin-settings' | 'admin-dash
 
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
+  
+  // ESTADO DE CARREGAMENTO INICIAL CRÍTICO
+  // Mantém a app em "Loading" até que User E Branding estejam carregados.
   const [isInitializing, setIsInitializing] = useState(true);
+  
   const [currentView, setCurrentView] = useState<ViewState>('patients');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -46,7 +50,7 @@ function AppContent() {
   // Password Recovery State
   const [showUpdatePasswordModal, setShowUpdatePasswordModal] = useState(false);
 
-  // Initial Data Fetch
+  // Initial Data Fetch for Patient Details
   useEffect(() => {
     const fetchPatient = async () => {
       if (selectedPatientId) {
@@ -78,41 +82,59 @@ function AppContent() {
     };
   }, [selectedPatientId]);
 
+  // --- LÓGICA DE INICIALIZAÇÃO ROBUSTA ---
   useEffect(() => {
     const initApp = async () => {
-      try {
-        // 1. Carregar usuário
-        const storedUser = await authService.getCurrentUser();
-        if (storedUser) {
-          setUser(storedUser);
-        }
+      setIsInitializing(true); // Garante que o loading está ativo
 
-        // 2. Carregar configurações de marca (Dinâmico)
-        const brandingSettings = await brandingService.getBrandingSettings();
+      try {
+        // Executa as chamadas críticas em PARALELO e espera ambas terminarem.
+        // Isso previne que a UI renderize parcialmente.
+        const [currentUser, brandingSettings] = await Promise.all([
+          authService.getCurrentUser(),
+          brandingService.getBrandingSettings()
+        ]);
+
+        // 1. Define Configurações da Marca
         setBranding({
           appName: brandingSettings.appName || 'Especial Senior',
           appLogoUrl: brandingSettings.appLogoUrl || ''
         });
 
+        // 2. Define Usuário (se logado)
+        if (currentUser) {
+          setUser(currentUser);
+        }
+
       } catch (error) {
-        console.error("App init error:", error);
+        console.error("Erro crítico na inicialização do App:", error);
       } finally {
+        // SOMENTE AGORA liberamos a interface
         setIsInitializing(false);
       }
     };
+
     initApp();
 
-    // LISTENER DE AUTH: Detecta recuperação de senha
+    // LISTENER DE AUTH: Detecta recuperação de senha e mudanças de sessão
     const { data: authListener } = (supabase.auth as any).onAuthStateChange(async (event: string, session: any) => {
       console.log("Auth Event Detectado:", event);
+      
       if (event === 'PASSWORD_RECOVERY') {
         setShowUpdatePasswordModal(true);
       }
       
       // Se o usuário logar (inclusive após a recuperação), atualizamos o estado
+      // Nota: Não setamos isInitializing=true aqui para não piscar a tela, 
+      // apenas atualizamos o user atomicamente.
       if (event === 'SIGNED_IN' && session) {
          const currentUser = await authService.getCurrentUser();
          if (currentUser) setUser(currentUser);
+      }
+
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setCurrentView('patients');
       }
     });
 
@@ -121,7 +143,7 @@ function AppContent() {
     };
   }, []);
 
-  // Redirecionamento inicial baseado na Role
+  // Redirecionamento inicial baseado na Role (Só executa após isInitializing ser false)
   useEffect(() => {
     if (user && !isInitializing) {
       if (user.role === 'ADMIN') {
@@ -139,6 +161,13 @@ function AppContent() {
 
   const handleLoginSuccess = (loggedInUser: User) => {
     setUser(loggedInUser);
+    // Força uma atualização rápida da marca caso tenha mudado (opcional, mas bom para garantir)
+    brandingService.getBrandingSettings().then(settings => {
+      setBranding({
+        appName: settings.appName || 'Especial Senior',
+        appLogoUrl: settings.appLogoUrl || ''
+      });
+    });
   };
 
   const handleLogout = async () => {
@@ -191,13 +220,14 @@ function AppContent() {
      return url;
   };
 
-  // Se estiver carregando, mostra spinner
+  // --- TELA DE CARREGAMENTO (Bloqueia tudo até estar pronto) ---
   if (isInitializing) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4"></div>
-          <p className="text-gray-500 font-medium">Carregando...</p>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <div className="flex flex-col items-center animate-fade-in">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-blue-600 mb-6"></div>
+          <h2 className="text-xl font-bold text-gray-900">Carregando Sistema...</h2>
+          <p className="text-gray-500 text-sm mt-2">Preparando seu ambiente seguro</p>
         </div>
       </div>
     );

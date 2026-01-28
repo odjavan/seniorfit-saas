@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { User as UserIcon, Mail, Shield, CreditCard, Save } from 'lucide-react';
 import { Input } from '../components/Input';
@@ -16,6 +16,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUserUpdate }) 
   const [name, setName] = useState(user.name);
   const [isLoading, setIsLoading] = useState(false);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    setName(user.name);
+  }, [user.name]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

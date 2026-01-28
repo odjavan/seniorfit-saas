@@ -40,7 +40,7 @@ serve(async (req) => {
     const clientSecret = Deno.env.get('EDUZZ_CLIENT_SECRET');
 
     if (!clientId || !clientSecret) {
-      throw new Error("Configuração de ambiente incompleta: EDUZZ_CLIENT_ID ou EDUZZ_SECRET ausentes.");
+      throw new Error("Configuração de ambiente incompleta: EDUZZ_CLIENT_ID ou EDUZZ_CLIENT_SECRET ausentes.");
     }
 
     // 3. Construção do Corpo da Requisição de Token

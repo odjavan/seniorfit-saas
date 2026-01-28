@@ -61,7 +61,9 @@ ${context}
 PERGUNTA DO PROFISSIONAL:
 ${question}
       `;
+      console.log("PASSO 2: PROMPT FINAL MONTADO:", prompt);
 
+      console.log("PASSO 3: TENTANDO CHAMAR A API...");
       const response = await this.client.models.generateContent({
         model: this.modelName,
         contents: prompt,
@@ -83,7 +85,10 @@ ${question}
       };
 
     } catch (error: any) {
-      console.error('❌ Erro na requisição Gemini:', error);
+      console.error("ERRO CRÍTICO NA CHAMADA DA API:", error);
+      if (typeof window !== 'undefined') {
+        window.alert("ERRO DETALHADO: " + (error.message || JSON.stringify(error)));
+      }
 
       // Tratamento de erros comuns
       if (error.message?.includes('429') || error.status === 429) {
@@ -136,6 +141,7 @@ export const useSeniorFitTutor = (apiKey: string) => {
       setQuotaExceeded(true);
       addToast('Tutor IA sobrecarregado. Aguarde um instante.', 'warning');
     } else if (!response.success) {
+      // O erro detalhado já foi exibido via alert no serviço, mas mantemos o toast genérico como fallback visual
       addToast(response.error || 'Erro na comunicação com a IA', 'error');
     }
 

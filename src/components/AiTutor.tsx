@@ -102,6 +102,7 @@ OBSERVAÇÕES DO PROFISSIONAL (Notas Atuais):
   };
 
   const handleSend = async () => {
+    console.log("--- INICIANDO DIAGNÓSTICO DO AI TUTOR ---");
     if (!inputText.trim()) return;
     const text = inputText;
     setInputText('');
@@ -111,6 +112,7 @@ OBSERVAÇÕES DO PROFISSIONAL (Notas Atuais):
     
     // 2. Coleta contexto atualizado (incluindo notas que podem ter mudado)
     const context = getPatientContext();
+    console.log("PASSO 1: DADOS DO CONTEXTO COLETADOS:", context);
 
     // 3. Chama IA
     const response = await ask(text, context);

@@ -63,7 +63,6 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   // Report Modal
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [clinicalObservations, setClinicalObservations] = useState('');
-  const [linkedAppointmentId, setLinkedAppointmentId] = useState<string | null>(null);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
@@ -135,10 +134,8 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
           
           if (appointment) {
             setClinicalObservations(appointment.notes);
-            setLinkedAppointmentId(appointment.id);
           } else {
             setClinicalObservations('');
-            setLinkedAppointmentId(null);
           }
         } catch (error) {
           console.error("Erro ao carregar observações:", error);
@@ -151,15 +148,11 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   }, [reportModalOpen, patient.id]);
 
   const handleSaveNotes = async () => {
-    if (!linkedAppointmentId) {
-      addToast("Nenhum agendamento vinculado encontrado para salvar observações.", "warning");
-      return;
-    }
-
     setIsSavingNotes(true);
     try {
-      await agendaService.updateNotes(linkedAppointmentId, clinicalObservations);
-      addToast("Observações salvas no agendamento.", "success");
+      // Usa a nova função que cria automaticamente se não existir
+      await agendaService.saveReportNotes(patient.id, clinicalObservations, undefined, patient.name);
+      addToast("Observações salvas!", "success");
     } catch (error) {
       console.error(error);
       addToast("Erro ao salvar observações.", "error");
@@ -1195,7 +1188,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                     <Button 
                       variant="primary" 
                       onClick={handleSaveNotes} 
-                      disabled={isSavingNotes || !linkedAppointmentId}
+                      disabled={isSavingNotes}
                       className="bg-blue-600 hover:bg-blue-700 text-xs px-3 py-1.5"
                     >
                       {isSavingNotes ? (
@@ -1219,16 +1212,10 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                    <textarea 
                      className="w-full p-3 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                      rows={3}
-                     placeholder={linkedAppointmentId ? "Digite aqui recomendações, observações específicas ou plano de cuidado..." : "Nenhum agendamento vinculado encontrado para salvar observações."}
+                     placeholder="Digite aqui recomendações, observações específicas ou plano de cuidado..."
                      value={clinicalObservations}
                      onChange={(e) => setClinicalObservations(e.target.value)}
-                     disabled={!linkedAppointmentId}
                    />
-                 )}
-                 {!linkedAppointmentId && !isLoadingNotes && (
-                   <p className="text-xs text-orange-600 mt-1">
-                     *Para salvar observações, é necessário ter um agendamento criado na Agenda.
-                   </p>
                  )}
               </div>
 

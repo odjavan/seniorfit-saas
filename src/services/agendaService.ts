@@ -37,8 +37,6 @@ export const agendaService = {
 
   /**
    * Tenta encontrar o agendamento mais relevante para um laudo.
-   * Se dateISO for fornecido, busca por data específica (Histórico).
-   * Se não, busca o último agendamento (Paciente atual).
    */
   getAppointmentForReport: async (patientId: string, dateISO?: string): Promise<{ id: string, notes: string } | null> => {
     const { data: { user } } = await (supabase.auth as any).getUser();
@@ -51,7 +49,6 @@ export const agendaService = {
       .eq('patient_id', patientId);
 
     if (dateISO) {
-      // Busca no dia específico
       const date = new Date(dateISO);
       const startOfDay = new Date(date.setHours(0, 0, 0, 0)).toISOString();
       const endOfDay = new Date(date.setHours(23, 59, 59, 999)).toISOString();
@@ -59,10 +56,9 @@ export const agendaService = {
       query = query
         .gte('date_time', startOfDay)
         .lte('date_time', endOfDay)
-        .order('date_time', { ascending: false }) // Pega o último do dia se houver mais de um
+        .order('date_time', { ascending: false })
         .limit(1);
     } else {
-      // Busca o último geral (mais recente)
       query = query
         .order('date_time', { ascending: false })
         .limit(1);
@@ -71,11 +67,56 @@ export const agendaService = {
     const { data, error } = await query.maybeSingle();
 
     if (error || !data) {
-      console.log("Nenhum agendamento vinculado encontrado para notas.");
       return null;
     }
 
     return { id: data.id, notes: data.notes || '' };
+  },
+
+  /**
+   * NOVA FUNÇÃO: Salva notas de relatório de forma blindada.
+   * Se já existe um agendamento (no dia ou recente), atualiza.
+   * Se não existe, CRIA um registro de "Avaliação" concluída para segurar a nota.
+   */
+  saveReportNotes: async (patientId: string, notes: string, dateReference?: string, patientName?: string): Promise<void> => {
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    if (!user) throw new Error("Usuário não autenticado.");
+
+    // 1. Tenta achar agendamento existente
+    const existing = await agendaService.getAppointmentForReport(patientId, dateReference);
+
+    if (existing) {
+      // Cenário A: Atualiza existente
+      const { error } = await supabase
+        .from('appointments')
+        .update({ 
+          notes: notes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existing.id)
+        .eq('user_id', user.id);
+
+      if (error) throw new Error(error.message);
+    } else {
+      // Cenário B: Cria novo registro automático (Container para a nota)
+      if (!patientName) throw new Error("Nome do paciente necessário para criar registro de notas.");
+      
+      const targetDate = dateReference ? new Date(dateReference).toISOString() : new Date().toISOString();
+      
+      const { error } = await supabase
+        .from('appointments')
+        .insert([{
+          user_id: user.id,
+          patient_id: patientId,
+          patient_name: patientName,
+          date_time: targetDate,
+          type: 'Avaliação Inicial', // Tipo padrão para laudos
+          status: 'Concluído',       // Já nasce concluído pois é um registro de histórico
+          notes: notes
+        }]);
+
+      if (error) throw new Error("Erro ao criar registro de notas: " + error.message);
+    }
   },
 
   updateNotes: async (id: string, notes: string): Promise<void> => {
@@ -94,8 +135,6 @@ export const agendaService = {
     if (error) throw new Error(error.message);
   },
 
-  // OBS: create movido para appointmentService para centralizar a lógica blindada
-  // Mantemos aqui caso legado, mas redirecionando erro.
   create: async (appointment: Omit<Appointment, 'id'>): Promise<Appointment> => {
      throw new Error("Use appointmentService.createAppointment para garantir segurança.");
   },
@@ -108,10 +147,10 @@ export const agendaService = {
       .from('appointments')
       .update({ 
         status,
-        updated_at: new Date().toISOString() // Rastreabilidade
+        updated_at: new Date().toISOString()
       })
       .eq('id', id)
-      .eq('user_id', user.id); // RLS: Garante propriedade
+      .eq('user_id', user.id);
 
     if (error) throw new Error(error.message);
   },
@@ -124,15 +163,12 @@ export const agendaService = {
       .from('appointments')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id); // RLS: Garante propriedade
+      .eq('user_id', user.id);
 
     if (error) throw new Error(error.message);
   },
 
-  // --- Realtime ---
   subscribe: (onUpdate: () => void): any => {
-    // Nota: O filtro de RLS no Realtime depende das Policies do Supabase.
-    // O frontend apenas escuta a tabela.
     return supabase
       .channel('agenda-changes')
       .on(

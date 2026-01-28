@@ -54,7 +54,6 @@ export const History: React.FC = () => {
   // Report Modal State
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [clinicalObservations, setClinicalObservations] = useState('');
-  const [linkedAppointmentId, setLinkedAppointmentId] = useState<string | null>(null);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
@@ -99,10 +98,8 @@ export const History: React.FC = () => {
           
           if (appointment) {
             setClinicalObservations(appointment.notes);
-            setLinkedAppointmentId(appointment.id);
           } else {
             setClinicalObservations('');
-            setLinkedAppointmentId(null);
           }
         } catch (error) {
           console.error("Erro ao carregar observações:", error);
@@ -115,15 +112,19 @@ export const History: React.FC = () => {
   }, [reportModalOpen, selectedPatientId, history]);
 
   const handleSaveNotes = async () => {
-    if (!linkedAppointmentId) {
-      addToast("Nenhum agendamento vinculado encontrado para salvar observações.", "warning");
-      return;
-    }
-
     setIsSavingNotes(true);
     try {
-      await agendaService.updateNotes(linkedAppointmentId, clinicalObservations);
-      addToast("Observações salvas no agendamento.", "success");
+      let targetDate = undefined;
+      if (history.length > 0) {
+         const sorted = [...history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+         targetDate = sorted[0].date;
+      }
+      
+      const patient = patients.find(p => p.id === selectedPatientId);
+      const patientName = patient ? patient.name : 'Paciente do Histórico';
+
+      await agendaService.saveReportNotes(selectedPatientId, clinicalObservations, targetDate, patientName);
+      addToast("Observações salvas!", "success");
     } catch (error) {
       console.error(error);
       addToast("Erro ao salvar observações.", "error");
@@ -494,7 +495,7 @@ export const History: React.FC = () => {
                     <Button 
                       variant="primary" 
                       onClick={handleSaveNotes} 
-                      disabled={isSavingNotes || !linkedAppointmentId}
+                      disabled={isSavingNotes}
                       className="bg-blue-600 hover:bg-blue-700 text-xs px-3 py-1.5"
                     >
                       {isSavingNotes ? (
@@ -518,16 +519,10 @@ export const History: React.FC = () => {
                    <textarea 
                      className="w-full p-3 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
                      rows={3}
-                     placeholder={linkedAppointmentId ? "Digite aqui recomendações, observações específicas ou plano de cuidado..." : "Nenhum agendamento vinculado encontrado para salvar observações."}
+                     placeholder="Digite aqui recomendações, observações específicas ou plano de cuidado..."
                      value={clinicalObservations}
                      onChange={(e) => setClinicalObservations(e.target.value)}
-                     disabled={!linkedAppointmentId}
                    />
-                 )}
-                 {!linkedAppointmentId && !isLoadingNotes && (
-                   <p className="text-xs text-orange-600 mt-1">
-                     *Para salvar observações, é necessário ter um agendamento criado na Agenda para a data de referência.
-                   </p>
                  )}
               </div>
 

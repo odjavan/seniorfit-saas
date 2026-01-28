@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Patient, AssessmentHistoryEntry } from '../types';
 import { CheckCircle2, AlertTriangle, XCircle, Calendar, Activity, User } from 'lucide-react';
@@ -75,7 +76,7 @@ export const ReportTemplate: React.FC<ReportTemplateProps> = ({ patient, observa
              <div className="bg-gray-900 text-white p-1 rounded">
                <Activity size={24} />
              </div>
-             <h1 className="text-2xl font-bold tracking-tight">SeniorFit</h1>
+             <h1 className="text-2xl font-bold tracking-tight">Especial Senior</h1>
            </div>
            <p className="text-sm text-gray-500">Sistema de Avaliação Funcional</p>
         </div>
@@ -197,7 +198,7 @@ export const ReportTemplate: React.FC<ReportTemplateProps> = ({ patient, observa
       <div className="border-t border-gray-200 pt-6 mt-8 flex flex-col items-center text-center break-inside-avoid">
          <div className="w-64 border-b border-gray-400 mb-2"></div>
          <p className="text-sm font-semibold text-gray-900 uppercase">Assinatura do Profissional</p>
-         <p className="text-xs text-gray-500 mt-4">Documento gerado pelo Sistema SeniorFit • Protocolo Igor Conterato Gomes</p>
+         <p className="text-xs text-gray-500 mt-4">Documento gerado pelo Sistema Especial Senior • Protocolo Igor Conterato Gomes</p>
          <p className="text-xs text-gray-400 mt-1">ID Paciente: {patient.id.slice(0, 8)}</p>
       </div>
     </div>

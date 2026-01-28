@@ -1,14 +1,16 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ArrowLeft, AlertCircle, CheckCircle2, UserCheck, Scale, Brain, 
   Heart, Activity, Move, Dumbbell, TrendingUp, ChevronLeft, ClipboardList,
-  Timer, Play, Pause, RotateCcw, Minus, Plus, Printer, Bot, Sparkles, MessageCircle, FileText, Lock
+  Timer, Play, Pause, RotateCcw, Minus, Plus, Printer, Bot, Sparkles, MessageCircle, FileText, Lock, Save, Loader2
 } from 'lucide-react';
 import { Patient, Screening, TestStatus, FragilityResult, TUGResult, ChairStandResult, ArmCurlResult, FlexibilityResult, DepressionResult, CognitiveResult, BalanceResult, AssessmentHistoryEntry } from '../types';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
 import { patientService } from '../services/patientService';
+import { agendaService } from '../services/agendaService';
 import { ReportTemplate } from '../components/ReportTemplate';
 import { AiTutor } from '../components/AiTutor';
 import { useToast } from '../contexts/ToastContext';
@@ -61,6 +63,9 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
   // Report Modal
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [clinicalObservations, setClinicalObservations] = useState('');
+  const [linkedAppointmentId, setLinkedAppointmentId] = useState<string | null>(null);
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(false);
 
   // AI Tutor State
   const [isAiTutorOpen, setIsAiTutorOpen] = useState(false);
@@ -118,6 +123,50 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
       stopCountdown();
     };
   }, []);
+
+  // Carrega as notas do agendamento quando o modal de relatório é aberto
+  useEffect(() => {
+    if (reportModalOpen && patient.id) {
+      const loadNotes = async () => {
+        setIsLoadingNotes(true);
+        try {
+          // Busca o último agendamento ou o agendamento de hoje
+          const appointment = await agendaService.getAppointmentForReport(patient.id);
+          
+          if (appointment) {
+            setClinicalObservations(appointment.notes);
+            setLinkedAppointmentId(appointment.id);
+          } else {
+            setClinicalObservations('');
+            setLinkedAppointmentId(null);
+          }
+        } catch (error) {
+          console.error("Erro ao carregar observações:", error);
+        } finally {
+          setIsLoadingNotes(false);
+        }
+      };
+      loadNotes();
+    }
+  }, [reportModalOpen, patient.id]);
+
+  const handleSaveNotes = async () => {
+    if (!linkedAppointmentId) {
+      addToast("Nenhum agendamento vinculado encontrado para salvar observações.", "warning");
+      return;
+    }
+
+    setIsSavingNotes(true);
+    try {
+      await agendaService.updateNotes(linkedAppointmentId, clinicalObservations);
+      addToast("Observações salvas no agendamento.", "success");
+    } catch (error) {
+      console.error(error);
+      addToast("Erro ao salvar observações.", "error");
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
 
   // --- Stopwatch Logic (TUG) ---
   const startTimer = () => {
@@ -1137,18 +1186,52 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
                     </Button>
                  </div>
               </div>
+              
               <div className="p-4 bg-blue-50 border-b border-blue-100 no-print">
-                 <label className="block text-sm font-bold text-blue-900 mb-2">
-                    Adicionar Observações Clínicas ou Conduta (Opcional):
-                 </label>
-                 <textarea 
-                   className="w-full p-3 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                   rows={3}
-                   placeholder="Digite aqui recomendações, observações específicas ou plano de cuidado para sair no laudo..."
-                   value={clinicalObservations}
-                   onChange={(e) => setClinicalObservations(e.target.value)}
-                 />
+                 <div className="flex justify-between items-center mb-2">
+                    <label className="block text-sm font-bold text-blue-900">
+                       Adicionar Observações Clínicas ou Conduta (Opcional):
+                    </label>
+                    <Button 
+                      variant="primary" 
+                      onClick={handleSaveNotes} 
+                      disabled={isSavingNotes || !linkedAppointmentId}
+                      className="bg-blue-600 hover:bg-blue-700 text-xs px-3 py-1.5"
+                    >
+                      {isSavingNotes ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin mr-1.5" /> Salvando...
+                        </>
+                      ) : (
+                        <>
+                          <Save size={14} className="mr-1.5" /> Salvar Observações
+                        </>
+                      )}
+                    </Button>
+                 </div>
+                 
+                 {isLoadingNotes ? (
+                   <div className="flex items-center justify-center p-4 bg-white rounded border border-blue-200">
+                     <Loader2 size={20} className="animate-spin text-blue-500 mr-2" />
+                     <span className="text-sm text-blue-600">Carregando observações do último agendamento...</span>
+                   </div>
+                 ) : (
+                   <textarea 
+                     className="w-full p-3 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                     rows={3}
+                     placeholder={linkedAppointmentId ? "Digite aqui recomendações, observações específicas ou plano de cuidado..." : "Nenhum agendamento vinculado encontrado para salvar observações."}
+                     value={clinicalObservations}
+                     onChange={(e) => setClinicalObservations(e.target.value)}
+                     disabled={!linkedAppointmentId}
+                   />
+                 )}
+                 {!linkedAppointmentId && !isLoadingNotes && (
+                   <p className="text-xs text-orange-600 mt-1">
+                     *Para salvar observações, é necessário ter um agendamento criado na Agenda.
+                   </p>
+                 )}
               </div>
+
               <div className="flex-1 overflow-y-auto bg-gray-200 p-8" id="report-scroll-container">
                  <div id="printable-section" className="bg-white shadow-xl mx-auto max-w-[21cm] min-h-[29.7cm] origin-top">
                     <ReportTemplate patient={patient} observations={clinicalObservations} />

@@ -1,3 +1,4 @@
+
 import { supabase } from '../lib/supabase';
 import { Appointment } from '../types';
 
@@ -32,6 +33,65 @@ export const agendaService = {
       status: a.status,
       notes: a.notes
     }));
+  },
+
+  /**
+   * Tenta encontrar o agendamento mais relevante para um laudo.
+   * Se dateISO for fornecido, busca por data específica (Histórico).
+   * Se não, busca o último agendamento (Paciente atual).
+   */
+  getAppointmentForReport: async (patientId: string, dateISO?: string): Promise<{ id: string, notes: string } | null> => {
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    if (!user) return null;
+
+    let query = supabase
+      .from('appointments')
+      .select('id, notes, date_time')
+      .eq('user_id', user.id)
+      .eq('patient_id', patientId);
+
+    if (dateISO) {
+      // Busca no dia específico
+      const date = new Date(dateISO);
+      const startOfDay = new Date(date.setHours(0, 0, 0, 0)).toISOString();
+      const endOfDay = new Date(date.setHours(23, 59, 59, 999)).toISOString();
+      
+      query = query
+        .gte('date_time', startOfDay)
+        .lte('date_time', endOfDay)
+        .order('date_time', { ascending: false }) // Pega o último do dia se houver mais de um
+        .limit(1);
+    } else {
+      // Busca o último geral (mais recente)
+      query = query
+        .order('date_time', { ascending: false })
+        .limit(1);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error || !data) {
+      console.log("Nenhum agendamento vinculado encontrado para notas.");
+      return null;
+    }
+
+    return { id: data.id, notes: data.notes || '' };
+  },
+
+  updateNotes: async (id: string, notes: string): Promise<void> => {
+    const { data: { user } } = await (supabase.auth as any).getUser();
+    if (!user) throw new Error("Usuário não autenticado.");
+
+    const { error } = await supabase
+      .from('appointments')
+      .update({ 
+        notes: notes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) throw new Error(error.message);
   },
 
   // OBS: create movido para appointmentService para centralizar a lógica blindada

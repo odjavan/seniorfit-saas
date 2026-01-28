@@ -123,15 +123,14 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
     };
   }, []);
 
-  // Carrega as notas do agendamento quando o modal de relatório é aberto
+  // Carrega as notas do agendamento quando o componente monta para ter o contexto pronto para a IA
+  // ou quando abre o modal de relatório
   useEffect(() => {
-    if (reportModalOpen && patient.id) {
+    if (patient.id) {
       const loadNotes = async () => {
         setIsLoadingNotes(true);
         try {
-          // Busca o último agendamento ou o agendamento de hoje
           const appointment = await agendaService.getAppointmentForReport(patient.id);
-          
           if (appointment) {
             setClinicalObservations(appointment.notes);
           } else {
@@ -145,7 +144,7 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
       };
       loadNotes();
     }
-  }, [reportModalOpen, patient.id]);
+  }, [patient.id]);
 
   const handleSaveNotes = async () => {
     setIsSavingNotes(true);
@@ -1228,7 +1227,13 @@ export const PatientDetails: React.FC<PatientDetailsProps> = ({ patient, onBack,
         </div>
       )}
 
-      <AiTutor patient={patient} isOpen={isAiTutorOpen} onClose={() => setIsAiTutorOpen(false)} />
+      {/* Passa as observações clínicas atualizadas para o Tutor */}
+      <AiTutor 
+        patient={patient} 
+        observations={clinicalObservations}
+        isOpen={isAiTutorOpen} 
+        onClose={() => setIsAiTutorOpen(false)} 
+      />
     </div>
   );
 };

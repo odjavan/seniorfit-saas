@@ -36,7 +36,7 @@ export const authService = {
         id: authData.user.id,
         email: authData.user.email!,
         name: 'Usuário',
-        role: 'TRAINER',
+        role: 'SUBSCRIBER', // Fallback seguro atualizado
         createdAt: new Date().toISOString(),
         subscriptionStatus: 'active'
       };
@@ -177,7 +177,7 @@ export const authService = {
       id: realUserId,
       email: userData.email,
       name: userData.name,
-      role: 'SUBSCRIBER',
+      role: userData.role || 'SUBSCRIBER',
       subscription_status: 'ACTIVE',
       cpf: userData.cpf || null,
       eduzz_id: userData.eduzzId || null,

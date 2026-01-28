@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, SystemSettings, Role } from '../types';
 import { authService } from '../services/authService';
 import { Button } from '../components/Button';
 import { Input } from '../components/Input';
 import { Modal } from '../components/Modal';
-import { Trash2, Edit, Plus, Save, Youtube } from 'lucide-react';
+import { Trash2, Edit, Plus, Save, Youtube, ShieldAlert } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
 
@@ -17,7 +18,7 @@ export const AdminPanel: React.FC = () => {
   // User Modal State
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'TRAINER' as Role });
+  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'ADMIN' as Role });
 
   useEffect(() => {
     loadData();
@@ -30,24 +31,6 @@ export const AdminPanel: React.FC = () => {
         authService.getAllUsers(),
         authService.getSettings()
       ]);
-
-      // Busca dados financeiros brutos do Supabase (campo total_paid_value não está na interface User padrão)
-      const { data: rawProfiles } = await supabase
-        .from('profiles')
-        .select('id, total_paid_value, role, subscription_status');
-
-      // Mescla os dados para uso interno se necessário, ou usa fetchedUsers
-      // Aqui usamos fetchedUsers para a tabela e rawProfiles se fôssemos exibir um dashboard financeiro aqui.
-      // O prompt pede "Dashboard Financeiro: Crie a lógica...".
-      // Assumindo que o AdminPanel.tsx deve ter um display financeiro ou que isso é usado em AdminHome (não solicitado).
-      // Mas para garantir que os dados estejam disponíveis:
-      
-      if (rawProfiles) {
-        // Lógica de cálculo real de faturamento
-        const totalRevenue = rawProfiles.reduce((acc, curr) => acc + (curr.total_paid_value || 0), 0);
-        console.log("Faturamento Total Real:", totalRevenue);
-        // Se houver um estado de 'revenue' neste componente, setaríamos aqui.
-      }
 
       setUsers(fetchedUsers);
       setSettings(fetchedSettings);
@@ -84,10 +67,12 @@ export const AdminPanel: React.FC = () => {
   const handleOpenUserModal = (user?: User) => {
     if (user) {
       setEditingUser(user);
+      // Se estiver editando, mantém o papel atual (seja ADMIN ou SUBSCRIBER)
       setUserForm({ name: user.name, email: user.email, role: user.role });
     } else {
       setEditingUser(null);
-      setUserForm({ name: '', email: '', role: 'TRAINER' });
+      // Novos usuários criados neste painel são ADMIN por padrão
+      setUserForm({ name: '', email: '', role: 'ADMIN' });
     }
     setIsUserModalOpen(true);
   };
@@ -100,7 +85,7 @@ export const AdminPanel: React.FC = () => {
         addToast('Usuário atualizado com sucesso!', 'success');
       } else {
         await authService.createUser(userForm);
-        addToast('Usuário criado com sucesso!', 'success');
+        addToast('Administrador criado com sucesso!', 'success');
       }
       setIsUserModalOpen(false);
       await loadData(); // Recarrega a lista atualizada
@@ -119,6 +104,12 @@ export const AdminPanel: React.FC = () => {
         addToast(error.message, 'error');
       }
     }
+  };
+
+  const getRoleLabel = (role: string) => {
+    if (role === 'ADMIN') return 'Administrador';
+    if (role === 'SUBSCRIBER') return 'Assinante';
+    return role;
   };
 
   return (
@@ -150,7 +141,7 @@ export const AdminPanel: React.FC = () => {
         <div>
           <div className="flex justify-end mb-4">
             <Button onClick={() => handleOpenUserModal()} variant="blue">
-              <Plus size={18} className="mr-2" /> Novo Usuário
+              <Plus size={18} className="mr-2" /> Novo Administrador
             </Button>
           </div>
           
@@ -170,8 +161,8 @@ export const AdminPanel: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{user.email}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {user.role}
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.role === 'ADMIN' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'}`}>
+                        {getRoleLabel(user.role)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -237,7 +228,7 @@ export const AdminPanel: React.FC = () => {
       <Modal
         isOpen={isUserModalOpen}
         onClose={() => setIsUserModalOpen(false)}
-        title={editingUser ? 'Editar Usuário' : 'Novo Usuário'}
+        title={editingUser ? 'Editar Usuário' : 'Novo Administrador'}
       >
         <form onSubmit={handleSaveUser} className="space-y-4">
           <Input
@@ -255,19 +246,13 @@ export const AdminPanel: React.FC = () => {
             disabled={!!editingUser}
           />
           
-          <div>
-            <label className="block text-sm font-bold text-gray-900 mb-1">Função</label>
-            <select
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm"
-              value={userForm.role}
-              onChange={e => setUserForm({ ...userForm, role: e.target.value as Role })}
-            >
-              <option value="TRAINER">Treinador</option>
-              <option value="PERSONAL">Personal</option>
-              <option value="ADMIN">Administrador</option>
-              <option value="SUBSCRIBER">Assinante</option>
-            </select>
-          </div>
+          {/* Campo Role Removido - Agora é automático */}
+          {!editingUser && (
+             <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 flex items-center gap-2 text-sm text-purple-800">
+               <ShieldAlert size={16} />
+               <span>Este usuário será criado com acesso total de <strong>Administrador</strong>.</span>
+             </div>
+          )}
 
           {!editingUser && (
              <p className="text-sm text-gray-500 bg-gray-50 p-2 rounded">

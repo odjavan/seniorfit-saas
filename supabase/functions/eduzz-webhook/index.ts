@@ -37,7 +37,7 @@ serve(async (req) => {
 
     // 2. Leitura dos Secrets
     const clientId = Deno.env.get('EDUZZ_CLIENT_ID');
-    const clientSecret = Deno.env.get('EDUZZ_SECRET'); // Mapeado como EDUZZ_SECRET no projeto
+    const clientSecret = Deno.env.get('EDUZZ_CLIENT_SECRET');
 
     if (!clientId || !clientSecret) {
       throw new Error("Configuração de ambiente incompleta: EDUZZ_CLIENT_ID ou EDUZZ_SECRET ausentes.");

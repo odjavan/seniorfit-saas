@@ -17,77 +17,82 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    // --- INÍCIO DO DEBUG DEEP DIVE (WEBHOOK RECEBIDO) ---
     console.log("==================================================")
-    console.log("📡 NOVA REQUISIÇÃO RECEBIDA - SENIORFIT WEBHOOK")
-    
-    const requestHeaders: Record<string, string> = {}
-    req.headers.forEach((value, key) => {
-      requestHeaders[key] = value
-    })
-    console.log("📋 HEADERS RECEBIDOS:", JSON.stringify(requestHeaders, null, 2))
+    console.log("📡 WEBHOOK EDUZZ - INICIANDO FLUXO AUTHORIZATION CODE")
 
-    // 1. Recebe o Payload "magro" (apenas ID geralmente)
+    // 1. Extração do CODE do Webhook (Passo Crítico)
     const initialPayload = await req.json()
-    console.log("📦 PAYLOAD INICIAL (WEBHOOK):", JSON.stringify(initialPayload, null, 2))
-    
-    // --- LÓGICA DE ENRIQUECIMENTO (BUSCA NA API EDUZZ) ---
-    
-    // A. Identifica o ID da transação
-    const transactionId = initialPayload.id || initialPayload.trans_cod || initialPayload.data?.id;
+    console.log("📦 PAYLOAD RECEBIDO:", JSON.stringify(initialPayload, null, 2))
 
-    if (!transactionId) {
-      throw new Error("ID da transação não encontrado no payload inicial. Payload recebido: " + JSON.stringify(initialPayload));
+    // O 'code' é fundamental para este fluxo
+    const code = initialPayload.code;
+    
+    // Tentamos identificar o ID da transação para uso posterior, embora o foco agora seja o token
+    const transactionId = initialPayload.trans_cod || initialPayload.id || initialPayload.data?.id;
+
+    if (!code) {
+      console.error("❌ O campo 'code' não foi encontrado no payload.")
+      throw new Error("Payload inválido: 'code' é obrigatório para este fluxo.")
     }
 
-    // B. Obtém Credenciais (Client ID e Secret)
-    const eduzzClientId = Deno.env.get('EDUZZ_CLIENT_ID');
-    const eduzzSecret = Deno.env.get('EDUZZ_SECRET');
+    // 2. Leitura dos Secrets
+    const clientId = Deno.env.get('EDUZZ_CLIENT_ID');
+    const clientSecret = Deno.env.get('EDUZZ_SECRET'); // Mapeado como EDUZZ_SECRET no projeto
 
-    // --- LOGS DE DIAGNÓSTICO DE SEGREDOS ---
-    console.log(`VERIFICANDO SEGREDOS: EDUZZ_CLIENT_ID lido como: ${eduzzClientId ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
-    console.log(`VERIFICANDO SEGREDOS: EDUZZ_SECRET lido como: ${eduzzSecret ? 'ENCONTRADO' : 'NÃO ENCONTRADO'}`);
-
-    if (!eduzzClientId || !eduzzSecret) {
-      throw new Error("Configuração ausente: EDUZZ_CLIENT_ID ou EDUZZ_SECRET não encontrados nas variáveis de ambiente.");
+    if (!clientId || !clientSecret) {
+      throw new Error("Configuração de ambiente incompleta: EDUZZ_CLIENT_ID ou EDUZZ_SECRET ausentes.");
     }
 
-    // C. Autenticação (Obter Access Token)
-    console.log("🔐 Autenticando com a API da Eduzz...");
-    
+    // 3. Construção do Corpo da Requisição de Token
+    // Conforme documentação: client_id, client_secret, code, redirect_uri, grant_type
+    const tokenRequestBody = {
+      client_id: clientId,
+      client_secret: clientSecret,
+      code: code,
+      redirect_uri: 'https://app.especialsenior.com/callback', // Placeholder válido exigido pela Eduzz
+      grant_type: 'authorization_code'
+    };
+
+    console.log("🔐 Trocando CODE por TOKEN...");
+
+    // 4. Chamada para a API de Token
     const tokenResponse = await fetch('https://accounts-api.eduzz.com/oauth/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({
-        client_id: eduzzClientId,
-        client_secret: eduzzSecret,
-        grant_type: "client_credentials"
-      })
+      body: JSON.stringify(tokenRequestBody)
     });
 
     if (!tokenResponse.ok) {
       const tokenError = await tokenResponse.text();
-      console.error(`❌ Erro ao obter Token Eduzz: ${tokenResponse.status} - ${tokenError}`);
-      throw new Error(`Falha na autenticação Eduzz: ${tokenResponse.status}`);
+      console.error(`❌ Erro na troca de token: ${tokenResponse.status} - ${tokenError}`);
+      throw new Error(`Falha ao obter Access Token: ${tokenResponse.status}`);
     }
 
+    // 5. Processamento da Resposta do Token
     const tokenData = await tokenResponse.json();
     const accessToken = tokenData.access_token;
-    
-    if (!accessToken) {
-      throw new Error("Access Token não retornado pela Eduzz.");
-    }
-    console.log("🔑 Token de acesso obtido com sucesso.");
 
-    // D. Faz a chamada GET para a API da Eduzz usando o Token
-    console.log(`🚀 Consultando Detalhes da Transação ID: ${transactionId}`);
+    if (!accessToken) {
+      throw new Error("A resposta da Eduzz não continha um access_token válido.");
+    }
+
+    console.log("🔑 Access Token obtido com sucesso. Buscando detalhes da transação...");
+
+    // --- LÓGICA DE ENRIQUECIMENTO (USANDO O NOVO TOKEN) ---
+    // Agora usamos o token para buscar os dados reais do cliente na API da Eduzz
+    
+    // Se não tivermos o ID da transação do payload inicial, não conseguimos buscar detalhes
+    if (!transactionId) {
+       throw new Error("ID da transação (trans_cod) não encontrado no payload inicial para consulta de detalhes.");
+    }
+
     const eduzzResponse = await fetch(`https://api.eduzz.com/v1/transactions/${transactionId}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${accessToken}`, // Token obtido via authorization_code
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       }
@@ -95,16 +100,14 @@ serve(async (req) => {
 
     if (!eduzzResponse.ok) {
       const errorText = await eduzzResponse.text();
-      console.error(`❌ Erro na API Eduzz (Transação): ${eduzzResponse.status} - ${errorText}`);
-      throw new Error(`Falha ao consultar transação: ${eduzzResponse.status}`);
+      console.error(`❌ Erro ao buscar detalhes da transação ${transactionId}: ${errorText}`);
+      throw new Error(`Falha na API de Transações: ${eduzzResponse.status}`);
     }
 
     const transactionDetails = await eduzzResponse.json();
-    console.log("📄 DETALHES COMPLETOS DA TRANSAÇÃO (API EDUZZ):", JSON.stringify(transactionDetails, null, 2));
+    const data = transactionDetails.data || transactionDetails;
 
-    // E. Extração de Dados Reais (Mapeamento Flexível)
-    const data = transactionDetails.data || transactionDetails; 
-    
+    // Extração final dos dados para criação do usuário
     const email = (
       data.client_email || 
       data.customer?.email || 
@@ -126,30 +129,25 @@ serve(async (req) => {
         initialPayload.product_id
     )?.toString();
 
-    console.log(`✅ Dados Extraídos -> Nome: ${name}, Email: ${email}, Produto: ${productId}`);
-    console.log("==================================================")
-    // --- FIM DO ENRIQUECIMENTO ---
+    console.log(`✅ DADOS CONFIRMADOS -> Nome: ${name}, Email: ${email}, Produto: ${productId}`);
 
+    if (!email) throw new Error("E-mail do cliente não encontrado nos detalhes da transação.");
+
+    // --- LÓGICA DO SUPABASE (Criação de Usuário) ---
+    // Inicializa cliente Supabase Admin
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
-    
-    if (!email) throw new Error('Campo de e-mail não encontrado nem no Webhook nem na API da Eduzz.')
-    
-    // Validação do Produto
-    if (productId && productId !== SENIORFIT_PRODUCT_ID) {
-       console.log(`⚠️ ALERTA: Produto ID ${productId} diferente do esperado (${SENIORFIT_PRODUCT_ID}). Prosseguindo com cautela.`);
-    }
 
-    // 4. BUSCA CONFIGURAÇÕES
+    // Busca configurações do sistema (para EmailJS e URLs)
     const { data: settings } = await supabase
       .from('system_settings')
       .select('*')
       .eq('id', '00000000-0000-0000-0000-000000000000')
       .single()
 
-    // 5. LÓGICA DE CADASTRO (Auth + Profile)
+    // Verifica se usuário já existe
     const { data: existing } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle()
     let userId;
 
@@ -157,6 +155,7 @@ serve(async (req) => {
       console.log(`👤 Criando novo usuário para: ${email}`)
       const tempPassword = `Senior${Math.random().toString(36).slice(-8)}!Fit`
       
+      // Cria no Auth
       const { data: auth, error: authErr } = await supabase.auth.admin.createUser({
         email, 
         password: tempPassword, 
@@ -167,6 +166,7 @@ serve(async (req) => {
       if (authErr) throw authErr
       userId = auth.user.id
       
+      // Cria no Profile (Tabela pública)
       await supabase.from('profiles').insert({ 
         id: userId, 
         email, 
@@ -176,10 +176,10 @@ serve(async (req) => {
         eduzz_id: transactionId
       })
       
-      // 6. DISPARO DE E-MAIL COM AUDITORIA
+      // Envia Email de Boas-Vindas
       if (settings?.emailjs_private_key) {
-        console.log('📧 Preparando envio EmailJS (Boas-vindas)...')
-        const emailRes = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        console.log('📧 Disparando e-mail de boas-vindas...')
+        await fetch('https://api.emailjs.com/api/v1.0/email/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -195,28 +195,24 @@ serve(async (req) => {
             }
           })
         })
-        const resBody = await emailRes.text()
-        console.log(`📬 RESPOSTA EMAILJS: Status ${emailRes.status} - Body: ${resBody}`)
       }
     } else {
-      console.log(`🔄 Usuário já existente (${email}). Atualizando status para ACTIVE.`)
+      console.log(`🔄 Usuário existente. Atualizando status para ACTIVE.`)
       await supabase.from('profiles').update({ 
           subscription_status: 'ACTIVE',
           eduzz_id: transactionId
       }).eq('email', email)
     }
 
-    return new Response(JSON.stringify({ success: true, action: existing ? 'updated' : 'created', email: email }), { 
+    return new Response(JSON.stringify({ success: true, action: existing ? 'updated' : 'created', email }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 
     })
 
   } catch (err: any) {
-    console.error('🚨 ERRO CRÍTICO NA FUNCTION:', err.message)
-    console.error('Stack:', err.stack)
-    // Retornamos 200 para evitar retentativas infinitas da Eduzz em caso de erro de lógica
+    console.error('🚨 ERRO FATAL NA FUNCTION:', err.message)
     return new Response(JSON.stringify({ success: false, error: err.message }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200 
+      status: 500 // Retorna 500 para a Eduzz saber que falhou e tentar reenviar se necessário
     })
   }
 })
